@@ -2,7 +2,7 @@
 
 client_id = "082955c7f94de3a19b269a13c08a329b"
 name = "combo-bundles"
-application_url = "https://example.com"
+application_url = "https://shopify.platinuminfo.tech"
 embedded = true
 
 [webhooks]
@@ -21,8 +21,10 @@ api_version = "2026-07"
 scopes = "read_products, write_products, write_metaobjects, write_metaobject_definitions"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
-
+redirect_urls = [
+  "https://shopify.platinuminfo.tech/auth/callback",
+  "https://shopify.platinuminfo.tech/auth/shopify/callback",
+  "https://shopify.platinuminfo.tech/api/auth/callback"
+]
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true
