@@ -1,0 +1,46 @@
+{% comment %}
+  Fetch the array of complementary products from the main product's metafields.
+  Replace 'your_namespace' and 'your_key' with the exact ones used in your Remix action code.
+{% endcomment %}
+{% assign bundle_products = product.metafields.your_namespace.your_key.value %}
+
+{% if bundle_products %}
+  <div class="combo-bundle-container" style="margin: 20px 0; padding: 15px; border: 1px solid #e1e1e1; border-radius: 8px;">
+    <h3 style="margin-bottom: 15px;">Frequently Bought Together</h3>
+    
+    <div class="combo-products-flex" style="display: flex; gap: 15px; align-items: center;">
+      <div class="product-card">
+        <img src="{{ product.featured_image | img_url: '100x100' }}" alt="{{ product.title }}">
+        <p>{{ product.title }}</p>
+        <span>{{ product.price | money }}</span>
+      </div>
+
+      <span style="font-size: 24px; font-weight: bold;">+</span>
+
+      {% for item in bundle_products %}
+        <div class="product-card">
+          <img src="{{ item.featured_image | img_url: '100x100' }}" alt="{{ item.title }}">
+          <p>{{ item.title }}</p>
+          <span>{{ item.price | money }}</span>
+        </div>
+        {% unless forloop.last %}
+          <span style="font-size: 24px; font-weight: bold;">+</span>
+        {% endunless %}
+      {% endfor %}
+    </div>
+
+    <button type="button" class="button button--primary" style="margin-top: 15px; width: 100%;">
+      Add Combo to Cart
+    </button>
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Combo Bundle Widget",
+  "target": "section",
+  "settings": [
+    { "type": "color", "id": "text_color", "label": "Text Color", "default": "#000000" }
+  ]
+}
+{% endschema %}

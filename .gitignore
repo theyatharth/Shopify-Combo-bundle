@@ -22,4 +22,5 @@ database.sqlite
 
 # Ignore shopify files created during app dev
 .shopify/*
-.shopify.lock
+.shopify.lockcombo-app.zip
+ combo-app.zip
