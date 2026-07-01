@@ -2,10 +2,15 @@ import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
-import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { authenticate } from "../shopify.server";
+//import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+import { authenticate } from "../shopify.server";	
+
+// Direct Vite CSS import (fixes the invisible UI bug)
+//import "@shopify/polaris/build/esm/styles.css";
+
+
+//export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -16,14 +21,13 @@ export const loader = async ({ request }) => {
 export default function App() {
   const { apiKey } = useLoaderData();
 
-  return (
+return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
+      <ui-nav-menu>
         <Link to="/app" rel="home">
           Home
         </Link>
-        <Link to="/app/additional">Additional page</Link>
-      </NavMenu>
+      </ui-nav-menu>
       <Outlet />
     </AppProvider>
   );

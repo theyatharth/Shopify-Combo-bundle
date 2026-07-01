@@ -6,8 +6,10 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 
+
 export default function App() {
-  return (
+ 
+ return (
     <html>
       <head>
         <meta charSet="utf-8" />
@@ -15,8 +17,11 @@ export default function App() {
         <link rel="preconnect" href="https://cdn.shopify.com/" />
         <link
           rel="stylesheet"
-          href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css"
-        />
+          href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css" />
+
+{/* 2. THE FIX: Force load Polaris CSS directly from Unpkg CDN */}
+        <link rel="stylesheet" href="https://unpkg.com/@shopify/polaris@12.0.0/build/esm/styles.css" />
+       
         <Meta />
         <Links />
       </head>
