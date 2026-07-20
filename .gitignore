@@ -25,3 +25,5 @@ combo-app.zip
 .shopify/*
 .shopify.lockcombo-app.zip
  combo-app.zip
+ecosystem.config.cjs
+ecosystem.config.js
