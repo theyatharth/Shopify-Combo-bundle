@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "082955c7f94de3a19b269a13c08a329b"
+client_id = "a15db3474337f1df79c6aee85570a88a"   # was 082955c7f94de3a19b269a13c08a329b
 name = "combo-bundles"
 application_url = "https://shopify.platinuminfo.tech"
 embedded = true
@@ -18,7 +18,7 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products, write_products, write_metaobjects, write_metaobject_definitions, read_discounts, write_discounts"
+scopes = "read_products, write_products, read_discounts, write_discounts, read_metaobjects, write_metaobjects, read_metaobject_definitions, write_metaobject_definitions"
 
 [auth]
 redirect_urls = [ "https://shopify.platinuminfo.tech/auth/callback",
