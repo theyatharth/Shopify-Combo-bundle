@@ -7,16 +7,23 @@
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
-            "cost": {
-              "subtotalAmount": {
-                "amount": "100.0"
+            "quantity": 3,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/1"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/2"
               }
             }
           }
         ]
-      },
-      "discount": {
-        "discountClasses": ["PRODUCT"]
       }
     },
     "output": {
@@ -25,22 +32,27 @@
           "productDiscountsAdd": {
             "candidates": [
               {
-                "message": "20% OFF PRODUCT",
+                "message": "5% Off Bundle Savings",
                 "targets": [
                   {
                     "cartLine": {
                       "id": "gid://shopify/CartLine/0"
                     }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/1"
+                    }
                   }
                 ],
                 "value": {
                   "percentage": {
-                    "value": 20.0
+                    "value": "5"
                   }
                 }
               }
             ],
-            "selectionStrategy": "FIRST"
+            "selectionStrategy": "MAXIMUM"
           }
         }
       ]

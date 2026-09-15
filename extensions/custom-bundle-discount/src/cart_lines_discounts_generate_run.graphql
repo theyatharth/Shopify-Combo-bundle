@@ -3,6 +3,13 @@ query CartInput {
     lines {
       id
       quantity
+      merchandise {
+        ... on ProductVariant {
+          product {
+            id
+          }
+        }
+      }
     }
   }
 }
