@@ -12,4 +12,9 @@ query CartInput {
       }
     }
   }
+  discount {
+    metafield(namespace: "$app:custom-bundle-discount", key: "function-configuration") {
+      value
+    }
+  }
 }

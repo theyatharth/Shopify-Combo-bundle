@@ -1,0 +1,13 @@
+{
+  "name": "Bundle Combo Discount Settings",
+  "description": "Configure which parts of the checkout the bundle combo discount applies to.",
+  "title": "Bundle Combo Discount",
+  "tiersExplanation": "This discount automatically applies a percentage off based on the number of distinct products in the cart: 5% for 2, 8% for 3, 10% for 4, 12% for 5, and 15% for 6 or more. Tiers are fixed in the app and aren't editable here.",
+  "discountClasses": {
+    "product": "Product discount",
+    "productHelp": "Applies the tiered bundle percentage off to the qualifying cart lines.",
+    "shipping": "Shipping discount",
+    "shippingHelp": "Also gives free shipping once the cart qualifies for a bundle discount."
+  },
+  "error": "Unable to update discount types. Please try again."
+}

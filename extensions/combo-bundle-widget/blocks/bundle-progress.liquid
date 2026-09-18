@@ -1,2076 +1,1442 @@
-{% comment %}
-  ------------------------------------------------------------------
-  Build Your Own Bundle — selection grid + sticky milestone bar
-  ------------------------------------------------------------------
-  - Shoppers toggle products in/out of a bundle from the grid below.
-    Nothing hits the real cart until they click "View Bundle".
-  - Hard cap of {{ max cap set in schema }} products; the top tier is
-    also the maximum discount tier — nothing unlocks past it.
-  - Discount tiers, colors, collection and max item count are all
-    merchant-editable in the theme editor via the schema below.
-{% endcomment %}
-
 {% liquid
-  assign byob_collection = collections[block.settings.collection]
-  assign byob_max_items = block.settings.max_items | default: 6
-
-  assign byob_tier_2 = block.settings.tier_2_pct
-  assign byob_tier_3 = block.settings.tier_3_pct
-  assign byob_tier_4 = block.settings.tier_4_pct
-  assign byob_tier_5 = block.settings.tier_5_pct
-  assign byob_tier_6 = block.settings.tier_6_pct
-
-  assign byob_collection_handle = byob_collection.handle
-  assign byob_product_count = byob_collection.products_count
+ assign byob_collection = collections[block.settings.collection]
+ assign byob_max_items = block.settings.max_items | default: 6
+ assign byob_tier_2 = block.settings.tier_2_pct
+ assign byob_tier_3 = block.settings.tier_3_pct
+ assign byob_tier_4 = block.settings.tier_4_pct
+ assign byob_tier_5 = block.settings.tier_5_pct
+ assign byob_tier_6 = block.settings.tier_6_pct
+ assign byob_collection_handle = byob_collection.handle
+ assign byob_product_count = byob_collection.products_count
 %}
-
 <style>
-  /* CSS variables scoped to BOTH the grid block AND the sticky bar (they are siblings, not parent/child) */
   #byob-block-{{ block.id }},
-  #byob-bottom-bar-{{ block.id }} {
-    --byob-green: {{ block.settings.accent_color }};
-    --byob-green-light: {{ block.settings.accent_color_light }};
-    --byob-grey: #D9DCE1;
-    --byob-grey-dark: #94A3B8;
-    --byob-text: #1E293B;
-    --byob-subtext: #64748B;
-    --byob-white: {{ block.settings.bg_color }};
-    --byob-orange-bg: #FFF3E0;
-    --byob-orange-text: #C2410C;
-    --byob-card-border: #E2E8F0;
-  }
-
-  .byob-section {
-    max-width: {{ block.settings.container_width }}px;
-    margin: 0 auto;
-    padding: 40px 24px 24px;
-    box-sizing: border-box;  /* padding included in width — prevents overflow */
-    width: 100%;
-    overflow-x: hidden;      /* hard stop — no horizontal scroll from this block */
-  }
-
-  .byob-section h2.byob-heading {
-    font-size: 26px;
-    margin: 0 0 4px;
-    color: var(--byob-text);
-  }
-
-  .byob-section p.byob-sub {
-    color: var(--byob-subtext);
-    margin: 0 0 28px;
-  }
-
-  /* ============ PRODUCT GRID ============ */
-  .byob-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 18px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .byob-product-card {
-    position: relative;
-    background: var(--byob-white);
-    border: 1px solid var(--byob-card-border);
-    border-radius: 10px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-  }
-
-  .byob-product-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08); }
-
-  /* Whole card (minus the Add button) opens the details popup */
+ #byob-bottom-bar-{{ block.id }} {
+  --byob-green: {{ block.settings.accent_color }};
+  --byob-green-light: {{ block.settings.accent_color_light }};
+  --byob-grey: #D9DCE1;
+  --byob-grey-dark: #94A3B8;
+  --byob-text: #1E293B;
+  --byob-subtext: #64748B;
+  --byob-white: {{ block.settings.bg_color }};
+  --byob-orange-bg: #FFF3E0;
+  --byob-orange-text: #C2410C;
+  --byob-card-border: #E2E8F0;
+ }
+ .byob-section {
+  max-width: {{ block.settings.container_width }}px;
+  margin: 0 auto;
+  padding: 40px 24px 24px;
+  box-sizing: border-box;      width: 100%;
+  overflow-x: hidden;        }
+ .byob-section h2.byob-heading { font-size: 26px; margin: 0 0 4px; color: var(--byob-text); }
+ .byob-section p.byob-sub { color: var(--byob-subtext); margin: 0 0 28px; }
+  .byob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; width: 100%; box-sizing: border-box; }
+ .byob-product-card { position: relative; background: var(--byob-white); border: 1px solid var(--byob-card-border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
+ .byob-product-card:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08); }
   .byob-product-card { cursor: pointer; }
-  .byob-product-card .byob-add-btn { cursor: pointer; }
-  .byob-product-card:focus-visible {
-    outline: 2px solid var(--byob-green);
-    outline-offset: 2px;
-  }
-  .byob-product-card.byob-card-soldout,
-  .byob-product-card.byob-card-disabled { cursor: default; }
-
-  .byob-product-image {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #F1F5F9;
-  }
-
-  .byob-product-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    transition: filter 0.2s ease, opacity 0.2s ease;
-  }
-
-  .byob-product-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    line-height: 1.3;
-    min-height: 34px;
-    color: var(--byob-text);
-    transition: opacity 0.2s ease;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .byob-product-price {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--byob-text);
-    transition: opacity 0.2s ease;
-  }
-
-  .byob-add-btn {
-    margin-top: 2px;
-    width: 100%;
-    padding: 9px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--byob-card-border);
-    background: var(--byob-white);
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.18s ease;
-    color: var(--byob-text);
-  }
-
-  .byob-add-btn:hover { border-color: var(--byob-green); color: var(--byob-green); }
-
-  .byob-product-card.byob-card-selected {
-    border-color: var(--byob-green);
-    border-width: 0.8px;
-    background: #F1FBF2;
-    box-shadow: 0 0 0 3px rgba(27, 94, 32, 0.12), 0 4px 12px rgba(27, 94, 32, 0.1);
-  }
-
-  .byob-product-card.byob-card-selected .byob-add-btn {
-    background: var(--byob-green);
-    border-color: var(--byob-green);
-    color: #fff;
-  }
-
-  .byob-selected-check {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 5;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--byob-green);
-    color: #fff;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-    box-shadow: 0 3px 8px rgba(27, 94, 32, 0.45);
-    pointer-events: none;
-  }
-
-  .byob-product-card.byob-card-selected .byob-selected-check { display: flex; }
-
-  .byob-product-card.byob-card-disabled { opacity: 0.5; pointer-events: none; }
-
-  .byob-product-card.byob-card-disabled .byob-add-btn {
-    background: #F1F5F9;
-    color: var(--byob-grey-dark);
-    border-color: var(--byob-card-border);
-    cursor: not-allowed;
-  }
-
-  .byob-product-card.byob-card-soldout .byob-add-btn {
-    background: #F1F5F9;
-    color: var(--byob-grey-dark);
-    cursor: not-allowed;
-  }
-
-  /* ============ PRODUCT DETAILS POPUP ============ */
-  .byob-modal-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    background: rgba(15, 23, 42, 0.55);
-    padding: 20px;
-    align-items: center;
-    justify-content: center;
-  }
-  .byob-modal-overlay.byob-modal-open { display: flex; }
-  body.byob-modal-locked { overflow: hidden; }
-
-  .byob-modal {
-    position: relative;
-    background: var(--byob-white);
-    border-radius: 14px;
-    width: 100%;
-    /* Widened from 640px — a narrow modal was leaving a lot of empty space
-       under the (fixed-size) image once the description/specs column grew
-       taller than the media column next to it. The wider layout gives the
-       carousel + reviews link more room to fill that column properly. */
-    max-width: 920px;
-    max-height: 90vh;
-    overflow-y: auto;
-    display: flex;
-    /* Default flex cross-axis behavior is "stretch", which was making the
-       media column grow taller every time "Read more" expanded the
-       description (they're flex siblings). flex-start keeps each side
-       sized to its own content instead. */
-    align-items: flex-start;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
-  }
-
-  .byob-modal-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 2;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.9);
-    color: var(--byob-text);
-    font-size: 20px;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
-  }
-  .byob-modal-close:hover { color: var(--byob-green); }
-
-  /* ---- Media column: carousel + dots + reviews link ----
-     This whole column is sized off its own content (fixed-width slides,
-     dot row, link) rather than stretching to match the text column, which
-     is what was leaving a slab of empty space below a single square image
-     whenever the description on the right ran long. */
-  .byob-modal-media {
-    flex: 0 0 44%;
-    align-self: flex-start;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 16px 0 16px 16px;
-    box-sizing: border-box;
-  }
-
-  .byob-modal-carousel {
-    position: relative;
-    background: #F1F5F9;
-    border-radius: 10px;
-    overflow: hidden;
-  }
-
-  .byob-modal-carousel-track {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .byob-modal-carousel-track::-webkit-scrollbar { display: none; }
-
-  .byob-modal-carousel-slide {
-    flex: 0 0 100%;
-    scroll-snap-align: start;
-    aspect-ratio: 1 / 1;
-  }
-  .byob-modal-carousel-slide img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .byob-modal-carousel-arrow {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.9);
-    color: var(--byob-text);
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
-  }
-  .byob-modal-carousel-arrow:hover { color: var(--byob-green); }
-  .byob-modal-carousel-arrow[hidden] { display: none; }
-  .byob-modal-carousel-prev { left: 8px; }
-  .byob-modal-carousel-next { right: 8px; }
-
-  .byob-modal-carousel-dots {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-  }
-  .byob-modal-carousel-dots[hidden] { display: none; }
-  .byob-modal-carousel-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    border: none;
-    padding: 0;
-    background: var(--byob-grey);
-    cursor: pointer;
-  }
-  .byob-modal-carousel-dot.is-active { background: var(--byob-green); }
-
-  .byob-modal-reviews-link {
-    display: block;
-    text-align: center;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--byob-green);
-    text-decoration: none;
-  }
-  .byob-modal-reviews-link:hover { text-decoration: underline; }
-
-  .byob-modal-body {
-    flex: 1 1 auto;
-    padding: 28px 26px 28px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .byob-modal-title {
-    font-size: 19px;
-    font-weight: 700;
-    color: var(--byob-text);
-    margin: 0;
-    padding-right: 24px;
-  }
-
-  .byob-modal-price {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--byob-green);
-  }
-
-  /* ---- Specs list (Color / Size / Material / Quantity, etc.) ----
-     Populated by JS from lines in the description that look like
-     "Label: Value" — kept separate from the flowing description so they
-     read as scannable facts instead of being buried in a paragraph. */
-  .byob-modal-specs {
-    list-style: none;
-    margin: 0;
-    padding: 10px 12px;
-    background: #F8FAF9;
-    border: 1px solid var(--byob-card-border);
-    border-radius: 8px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 6px 16px;
-  }
-  .byob-modal-specs[hidden] { display: none; }
-  .byob-modal-specs li {
-    font-size: 12.5px;
-    color: var(--byob-text);
-    line-height: 1.5;
-  }
-  .byob-modal-specs li strong {
-    font-weight: 700;
-    color: var(--byob-subtext);
-    text-transform: uppercase;
-    font-size: 10.5px;
-    letter-spacing: 0.04em;
-    display: block;
-  }
-
-  .byob-modal-desc-wrap {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  .byob-modal-desc {
-    font-size: 13.5px;
-    line-height: 1.6;
-    color: var(--byob-subtext);
-    margin: 0;
-    /* Full text lives in the DOM; JS toggles between a clamped preview and
-       the complete description rather than truncating the data itself, so
-       "Read more" always has the full product description to expand into. */
-    white-space: pre-line;
-    word-break: break-word;
-  }
-
-  .byob-modal-readmore {
-    display: inline-block;
-    margin-top: 4px;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--byob-green);
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .byob-modal-readmore:hover { opacity: 0.75; }
-  .byob-modal-readmore[hidden] { display: none; }
-
-  /* ---- Add to Bundle (popup) ----
-     Lives in the media column, not at the bottom of the text column, so it
-     stays put and visible regardless of how long the description gets —
-     see the comment next to the button markup. Default state is a "lightly
-     highlighted" outline look; once added it switches to solid green so the
-     state change is unmistakable at a glance. */
-  .byob-modal-add-btn {
-    width: 100%;
-    margin-top: 4px;
-    padding: 11px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    cursor: pointer;
-    transition: all 0.18s ease;
-    box-sizing: border-box;
-    background: var(--byob-green-light);
-    border: 1.5px solid var(--byob-green);
-    color: var(--byob-green);
-  }
-  .byob-modal-add-btn:hover:not(:disabled):not(.is-added) {
-    background: var(--byob-green);
-    color: #fff;
-  }
-  .byob-modal-add-btn.is-added {
-    background: var(--byob-green);
-    border-color: var(--byob-green);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(27, 94, 32, 0.3);
-  }
-  .byob-modal-add-btn.is-added:hover { filter: brightness(1.08); }
-  .byob-modal-add-btn:disabled {
-    background: #F1F5F9;
-    border-color: var(--byob-card-border);
-    color: var(--byob-grey-dark);
-    cursor: not-allowed;
-  }
-
-  @media screen and (max-width: 640px) {
-    .byob-modal-overlay { padding: 0; align-items: flex-end; }
-    .byob-modal {
-      flex-direction: column;
-      max-width: 100%;
-      max-height: 92vh;
-      border-radius: 16px 16px 0 0;
-    }
-    .byob-modal-media {
-      flex: 0 0 auto;
-      width: 100%;
-      padding: 0 16px 16px;
-    }
-    .byob-modal-carousel { border-radius: 0; margin: 0 -16px; width: calc(100% + 32px); }
-    .byob-modal-carousel-slide { aspect-ratio: 4 / 3; }
-    .byob-modal-carousel-dots { padding: 8px 0 0; }
-    .byob-modal-reviews-link { padding: 0 0 4px; }
-    .byob-modal-body { padding: 4px 20px 20px; }
-    .byob-modal-specs { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-  }
-
-  /* ============ STICKY BOTTOM BAR ============ */
+ .byob-product-card .byob-add-btn { cursor: pointer; }
+ .byob-product-card:focus-visible { outline: 2px solid var(--byob-green); outline-offset: 2px; }
+ .byob-product-card.byob-card-soldout, .byob-product-card.byob-card-disabled { cursor: default; }  .byob-product-image { position: relative; z-index: 1; width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; background: #F1F5F9; }
+ .byob-product-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter 0.2s ease, opacity 0.2s ease; }
+ .byob-product-title { font-size: 13.5px; font-weight: 600; line-height: 1.3; min-height: 34px; color: var(--byob-text); transition: opacity 0.2s ease; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+ .byob-product-price { font-size: 14px; font-weight: 700; color: var(--byob-text); transition: opacity 0.2s ease; }
+  .byob-areviews-source { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0.01; pointer-events: none; }
+ .byob-add-btn { margin-top: 2px; width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid var(--byob-card-border); background: var(--byob-white); font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all 0.18s ease; color: var(--byob-text); }
+ .byob-add-btn:hover { border-color: var(--byob-green); color: var(--byob-green); }
+ .byob-product-card.byob-card-selected { border-color: var(--byob-green); border-width: 0.8px; background: #F1FBF2; box-shadow: 0 0 0 3px rgba(27, 94, 32, 0.12), 0 4px 12px rgba(27, 94, 32, 0.1); }
+ .byob-product-card.byob-card-selected .byob-add-btn { background: var(--byob-green); border-color: var(--byob-green); color: #fff; }
+ .byob-selected-check { position: absolute; top: 8px; right: 8px; z-index: 5; width: 32px; height: 32px; border-radius: 50%; background: var(--byob-green); color: #fff; display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; box-shadow: 0 3px 8px rgba(27, 94, 32, 0.45); pointer-events: none; }
+ .byob-product-card.byob-card-selected .byob-selected-check { display: flex; }
+ .byob-product-card.byob-card-disabled { opacity: 0.5; pointer-events: none; }
+ .byob-product-card.byob-card-disabled .byob-add-btn { background: #F1F5F9; color: var(--byob-grey-dark); border-color: var(--byob-card-border); cursor: not-allowed; }
+ .byob-product-card.byob-card-soldout .byob-add-btn { background: #F1F5F9; color: var(--byob-grey-dark); cursor: not-allowed; }
+  .byob-modal-overlay { display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.55); padding: 20px; align-items: center; justify-content: center; }
+ .byob-modal-overlay.byob-modal-open { display: flex; }
+ body.byob-modal-locked { overflow: hidden; }
+  .byob-modal { position: relative; background: var(--byob-white); border-radius: 18px; width: 100%; max-width: 980px; max-height: 90vh; display: flex; align-items: stretch; overflow: hidden; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32); }
+ .byob-modal-close { position: absolute; top: 14px; right: 14px; z-index: 5; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--byob-card-border); background: #fff; color: var(--byob-text); font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(15, 23, 42, 0.16); transition: color 0.15s ease, transform 0.15s ease; }
+ .byob-modal-close:hover { color: var(--byob-green); transform: scale(1.05); }
+  .byob-modal-media { flex: 0 0 51%; max-width: 51%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 24px; }
+ .byob-modal-carousel { position: relative; background: #F1F5F9; border-radius: 12px; overflow: hidden; }
+ .byob-modal-carousel-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+ .byob-modal-carousel-track::-webkit-scrollbar { display: none; }
+ .byob-modal-carousel-slide { flex: 0 0 100%; scroll-snap-align: start; aspect-ratio: 1 / 1; }
+ .byob-modal-carousel-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+ .byob-modal-carousel-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.92); color: var(--byob-text); font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22); }
+ .byob-modal-carousel-arrow:hover { color: var(--byob-green); }
+ .byob-modal-carousel-arrow[hidden] { display: none; }
+ .byob-modal-carousel-prev { left: 10px; }
+ .byob-modal-carousel-next { right: 10px; }
+  .byob-modal-thumbs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+ .byob-modal-thumbs::-webkit-scrollbar { display: none; }
+ .byob-modal-thumbs[hidden] { display: none; }
+ .byob-modal-thumb { flex: 0 0 auto; width: 60px; height: 60px; border-radius: 8px; overflow: hidden; background: #F1F5F9; border: 2px solid transparent; padding: 0; cursor: pointer; transition: border-color 0.15s ease; }
+ .byob-modal-thumb.is-active { border-color: var(--byob-green); }
+ .byob-modal-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .byob-modal-reviews-card { background: var(--byob-green-light); border-radius: 12px; padding: 14px 16px 16px; }
+ .byob-modal-reviews-card[hidden] { display: none; }
+ .byob-modal-reviews-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+ .byob-modal-reviews-title { font-size: 14px; font-weight: 800; color: var(--byob-text); }
+ .byob-modal-reviews-seeall { font-size: 12px; font-weight: 700; color: var(--byob-green); text-decoration: none; white-space: nowrap; }
+ .byob-modal-reviews-seeall:hover { text-decoration: underline; }
+ .byob-modal-reviews-carousel { display: flex; align-items: center; gap: 8px; }
+ .byob-modal-reviews-arrow { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: none; background: #fff; color: var(--byob-text); font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15); }
+ .byob-modal-reviews-arrow:hover { color: var(--byob-green); }
+ .byob-modal-reviews-arrow[hidden] { display: none; }
+ .byob-modal-reviews-track { flex: 1 1 auto; min-width: 0; background: #fff; border-radius: 10px; padding: 12px 14px; }
+  .byob-modal-review-slide { display: none; flex-direction: column; }
+ .byob-modal-review-slide.is-active { display: flex; }
+ .byob-modal-review-slide .comment_container { order: 1; }
+ .byob-modal-review-slide .comment { font-size: 12.5px; line-height: 1.5; color: var(--byob-text); margin: 0; }
+ .byob-modal-review-slide .areviews_hide_long_reviews { display: none; }
+ .byob-modal-review-slide .main_container_review_stars { order: 2; display: block; margin: 8px 0 4px; }
+ .byob-modal-review-slide .main_container_review_stars i { font-size: 11px; margin-right: 1px; }
+ .byob-modal-review-slide .fas.fa-star { color: #F3C621; }
+ .byob-modal-review-slide .far.fa-star { color: var(--byob-grey); }
+ .byob-modal-review-slide .areviews_user_data { order: 3; font-size: 12px; font-weight: 700; color: var(--byob-subtext); margin: 0; }
+ .byob-modal-review-slide .areviews_user_name::before { content: "— "; }
+ .byob-modal-review-slide .verified_user { display: none; }
+ .byob-modal-areviews:empty { display: none; }
+ .byob-modal-areviews:not(:empty) { margin-bottom: 6px; }
+ .byob-modal-reviews-link { display: inline-flex; align-items: center; gap: 4px; width: fit-content; font-size: 12.5px; font-weight: 700; color: var(--byob-green); text-decoration: none; }
+ .byob-modal-reviews-link:hover { text-decoration: underline; }
+  .byob-modal-body { flex: 1 1 49%; max-width: 49%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; padding: 28px 26px 26px 20px; min-width: 0; }
+ .byob-modal-title { font-size: 20px; font-weight: 700; line-height: 1.3; color: var(--byob-text); margin: 0 0 8px; padding-right: 30px; }
+ .byob-modal-price-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 10px; margin: 6px 0 14px; }
+ .byob-modal-price { font-size: 22px; font-weight: 800; color: var(--byob-text); }
+ .byob-modal-compare-price { font-size: 15px; font-weight: 500; color: var(--byob-grey-dark); text-decoration: line-through; }
+ .byob-modal-compare-price[hidden], .byob-modal-discount-badge[hidden] { display: none; }
+ .byob-modal-discount-badge { background: var(--byob-green-light); color: var(--byob-green); font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+ .byob-modal-desc-wrap { margin-bottom: 18px; }
+  .byob-modal-desc { font-size: 13.5px; line-height: 1.6; color: var(--byob-subtext); margin: 0; word-break: break-word; }
+ .byob-modal-desc.is-clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+ .byob-modal-desc p { margin: 0 0 10px; }
+ .byob-modal-desc p:last-child { margin-bottom: 0; }
+ .byob-modal-desc strong, .byob-modal-desc b { color: var(--byob-text); font-weight: 700; }
+ .byob-modal-desc ul, .byob-modal-desc ol { margin: 0 0 10px; padding-left: 20px; }
+ .byob-modal-desc li { margin-bottom: 4px; }
+ .byob-modal-desc a { color: var(--byob-green); }
+ .byob-modal-readmore { display: inline-block; margin-top: 4px; padding: 0; border: none; background: none; color: var(--byob-green); font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+ .byob-modal-readmore:hover { opacity: 0.75; }
+ .byob-modal-readmore[hidden] { display: none; }
+  .byob-modal-bundle-box { background: var(--byob-green-light); border: 1px solid rgba(27, 94, 32, 0.14); border-radius: 12px; padding: 16px 16px 14px; margin-bottom: 18px; }
+ .byob-modal-bundle-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+ .byob-modal-bundle-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; background: var(--byob-green); display: flex; align-items: center; justify-content: center; }
+ .byob-modal-bundle-icon svg { width: 19px; height: 19px; }
+ .byob-modal-bundle-title { font-size: 14.5px; font-weight: 800; color: var(--byob-text); }
+ .byob-modal-bundle-count { font-size: 12px; font-weight: 700; color: var(--byob-subtext); }
+ .byob-modal-bundle-count span { color: var(--byob-green); }
+  .byob-modal-ladder .byob-node-circle { width: 21px; height: 21px; font-size: 9.5px; }
+ .byob-modal-ladder .byob-node-label { font-size: 8.5px; }
+ .byob-modal-ladder .byob-ladder-track { top: 10px; left: 10px; right: 10px; }
+ .byob-modal-ladder .byob-ladder-track-fill { height: 2px; }
+ .byob-modal-ladder .byob-node.byob-current .byob-node-circle,
+ .byob-modal-ladder .byob-node.byob-maxed .byob-node-circle { box-shadow: 0 0 0 3px var(--byob-green-light); transform: scale(1.1); }
+ .byob-modal-bundle-box .byob-node-circle { background: #fff; border-color: rgba(27, 94, 32, 0.35); }
+  .byob-modal-actions-row { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+ .byob-modal-qty-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--byob-text); margin-bottom: 8px; }
+ .byob-modal-qty-stepper { flex-shrink: 0; display: flex; align-items: center; border: 1px solid var(--byob-card-border); border-radius: 8px; overflow: hidden; width: fit-content; }
+ .byob-modal-qty-stepper button { width: 38px; height: 44px; border: none; background: #F8FAF9; color: var(--byob-text); font-size: 16px; font-weight: 700; cursor: pointer; line-height: 1; }
+ .byob-modal-qty-stepper button:hover { background: var(--byob-green-light); color: var(--byob-green); }
+ .byob-modal-qty-stepper span { min-width: 38px; text-align: center; font-size: 14px; font-weight: 700; color: var(--byob-text); }
+ .byob-modal-add-btn { flex: 1 1 auto; height: 46px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; font-weight: 800; letter-spacing: 0.01em; cursor: pointer; transition: all 0.18s ease; box-sizing: border-box; background: var(--byob-green); border: 1.5px solid var(--byob-green); color: #fff; }
+ .byob-modal-add-btn:hover:not(:disabled):not(.is-added) { filter: brightness(1.1); }
+ .byob-modal-add-btn.is-added { background: var(--byob-white); border-color: var(--byob-green); color: var(--byob-green); }
+ .byob-modal-add-btn:disabled { background: #F1F5F9; border-color: var(--byob-card-border); color: var(--byob-grey-dark); cursor: not-allowed; }
+ .byob-modal-qty-note { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; color: var(--byob-subtext); margin: 0 0 10px; }
+ .byob-modal-trust-strip { content-visibility: visible !important; display: flex !important; flex-wrap: nowrap; border: 1px solid #E2E2DA; border-radius: 8px; margin: 4px 0 16px; overflow: visible; }
+ .byob-modal-trust-item { content-visibility: visible !important; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 11px 6px; text-align: center; border-right: 1px solid #E2E2DA; gap: 4px; box-sizing: border-box; }
+ .byob-modal-trust-item:last-child { border-right: none; }
+ .byob-modal-trust-item svg { flex-shrink: 0; }
+ .byob-modal-trust-text { display: flex; flex-direction: column; gap: 2px; }
+ .byob-modal-trust-label { font-size: 10px; font-weight: 600; color: #1A1A1A; line-height: 1.25; white-space: nowrap; }
+ .byob-modal-trust-sub { font-size: 9px; color: #888888; line-height: 1.25; white-space: nowrap; }
+ @media (max-width: 600px) {
+  .byob-modal-trust-strip { flex-wrap: wrap; }
+  .byob-modal-trust-item { flex: 1 1 50%; flex-direction: row; align-items: center; text-align: left; padding: 12px 10px; gap: 10px; }
+  .byob-modal-trust-item:nth-child(1), .byob-modal-trust-item:nth-child(2) { border-bottom: 1px solid #E2E2DA; }
+  .byob-modal-trust-item:nth-child(2) { border-right: none; }
+  .byob-modal-trust-item:nth-child(3) { border-right: 1px solid #E2E2DA; }
+  .byob-modal-trust-item:nth-child(4) { border-right: none; }
+  .byob-modal-trust-label { font-size: 12px; white-space: normal; }
+  .byob-modal-trust-sub { font-size: 10px; white-space: normal; }
+ }
+  .byob-modal-recs { border-top: 1px solid var(--byob-card-border); padding-top: 16px; }
+ .byob-modal-recs[hidden] { display: none; }
+ .byob-modal-recs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+ .byob-modal-recs-head-left { display: flex; align-items: center; gap: 10px; }
+ .byob-modal-recs-icon { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--byob-green-light); color: var(--byob-green); display: flex; align-items: center; justify-content: center; }
+ .byob-modal-recs-icon svg { width: 17px; height: 17px; }
+ .byob-modal-recs-title { font-size: 14px; font-weight: 800; color: var(--byob-text); }
+ .byob-modal-recs-sub { font-size: 11.5px; color: var(--byob-subtext); margin-top: 1px; }
+ .byob-modal-recs-seemore { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--byob-green); text-decoration: none; white-space: nowrap; }
+ .byob-modal-recs-seemore:hover { text-decoration: underline; }
+ .byob-modal-recs-track { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+ .byob-modal-rec-card { flex: 0 0 128px; display: flex; flex-direction: column; gap: 6px; }
+ .byob-modal-rec-image { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; background: #F1F5F9; }
+ .byob-modal-rec-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+ .byob-modal-rec-title { font-size: 11.5px; font-weight: 600; color: var(--byob-text); line-height: 1.3; min-height: 29px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+ .byob-modal-rec-price { font-size: 12px; font-weight: 700; color: var(--byob-text); }
+ .byob-modal-rec-add { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--byob-card-border); background: #fff; font-size: 11px; font-weight: 700; color: var(--byob-text); cursor: pointer; transition: all 0.15s ease; }
+ .byob-modal-rec-add:hover { border-color: var(--byob-green); color: var(--byob-green); }
+ .byob-modal-rec-add.is-added { background: var(--byob-green); border-color: var(--byob-green); color: #fff; }
+ @media screen and (max-width: 900px) {
+  .byob-modal { max-width: 760px; }
+  .byob-modal-media, .byob-modal-body { flex-basis: 50%; max-width: 50%; padding: 18px; }
+  .byob-modal-title { font-size: 18px; }
+  .byob-modal-price { font-size: 19px; }
+  .byob-modal-bundle-box { padding: 13px 13px 12px; }
+  .byob-modal-actions-row { gap: 10px; }
+ }
+ @media screen and (max-width: 768px) {
+  .byob-modal-overlay { padding: 0; align-items: flex-end; }
+  .byob-modal { flex-direction: column; max-width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; overflow-y: auto; }
+  .byob-modal-media, .byob-modal-body { flex: 0 0 auto; max-width: 100%; width: 100%; overflow: visible; }
+  .byob-modal-media { padding: 18px 16px 12px; gap: 10px; }
+  .byob-modal-carousel { border-radius: 10px; }
+  .byob-modal-carousel-slide { aspect-ratio: 1 / 1; }
+  .byob-modal-thumb { width: 50px; height: 50px; }
+  .byob-modal-body { padding: 4px 18px 22px; }
+  .byob-modal-title { font-size: 18px; padding-right: 34px; }
+  .byob-modal-price { font-size: 19px; }
+ }
   #byob-bottom-bar-{{ block.id }} {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9999;
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--byob-white);
-    box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.10), 0 -1px 4px rgba(15, 23, 42, 0.06);
-    border-top: 3px solid var(--byob-green);
-    padding: 14px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    transform: translateY(0);
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  #byob-bottom-bar-{{ block.id }}.byob-hidden { transform: translateY(100%); }
-
-  .byob-left { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
-
-  .byob-bag-wrap {
-    position: relative;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--byob-green);
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(27, 94, 32, 0.3);
-  }
-
-  .byob-bag-wrap svg,
-  .byob-bag-icon { width: 20px; height: 20px; color: #fff; }
-
-  .byob-count-badge {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: #fff;
-    color: var(--byob-green);
-    font-size: 11px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid var(--byob-green);
-    box-sizing: border-box;
-    transition: transform 0.2s ease;
-  }
-
-  .byob-count-badge.byob-bump { animation: byobBadgeBump-{{ block.id }} 0.35s ease; }
-
-  @keyframes byobBadgeBump-{{ block.id }} {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.35); }
-    100% { transform: scale(1); }
-  }
-
-  .byob-left-text { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
-  .byob-left-title { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: var(--byob-text); }
-  .byob-left-subtitle { font-size: 11.5px; font-weight: 700; color: var(--byob-green); }
-
-  .byob-center { flex: 1 1 auto; max-width: 620px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-
-  /* Mobile-only "2 of 4 items" label — hidden on desktop, shown under 900px */
-  .byob-mobile-progress-label {
-    display: none;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--byob-subtext);
-    text-align: center;
-  }
-
-  .byob-ladder { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
-
-  .byob-ladder-track {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    height: 3px;
-    background: var(--byob-grey);
-    border-radius: 3px;
-    z-index: 0;
-  }
-
-  .byob-ladder-track-fill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 0%;
-    background: var(--byob-green);
-    border-radius: 3px;
-    transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  /* flex: 1 instead of a hardcoded percentage — divides evenly no matter
-     how many tier nodes are actually rendered (4 today, could be more/fewer). */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--byob-white);
+  box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.10), 0 -1px 4px rgba(15, 23, 42, 0.06);
+  border-top: 3px solid var(--byob-green);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  transform: translateY(0);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+ }
+ #byob-bottom-bar-{{ block.id }}.byob-hidden { transform: translateY(100%); }
+ .byob-left { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+ .byob-bag-wrap { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--byob-green); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(27, 94, 32, 0.3); }
+ .byob-bag-wrap svg, .byob-bag-icon { width: 20px; height: 20px; color: #fff; }  .byob-count-badge { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #fff; color: var(--byob-green); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--byob-green); box-sizing: border-box; transition: transform 0.2s ease; }
+ .byob-count-badge.byob-bump { animation: byobBadgeBump-{{ block.id }} 0.35s ease; }
+ @keyframes byobBadgeBump-{{ block.id }} {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+ }
+ .byob-left-text { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+ .byob-left-title { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: var(--byob-text); }
+ .byob-left-subtitle { font-size: 11.5px; font-weight: 700; color: var(--byob-green); }
+ .byob-center { flex: 1 1 auto; max-width: 620px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .byob-mobile-progress-label { display: none; font-size: 11px; font-weight: 700; color: var(--byob-subtext); text-align: center; }
+ .byob-ladder { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
+ .byob-ladder-track { position: absolute; top: 12px; left: 12px; right: 12px; height: 3px; background: var(--byob-grey); border-radius: 3px; z-index: 0; }
+ .byob-ladder-track-fill { position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: var(--byob-green); border-radius: 3px; transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
   .byob-node { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1 1 0; min-width: 0; }
-
-  .byob-node-circle {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--byob-grey);
-    border: 2px solid var(--byob-grey);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 800;
-    color: #334155;
-    box-sizing: border-box;
-    transition: all 0.25s ease;
-  }
-
-  .byob-node.byob-active .byob-node-circle {
-    background: var(--byob-green);
-    border-color: var(--byob-green);
-    color: #fff;
-  }
-
-  .byob-node.byob-current .byob-node-circle,
-  .byob-node.byob-maxed .byob-node-circle {
-    box-shadow: 0 0 0 4px var(--byob-green-light);
-    transform: scale(1.12);
-  }
-
-  .byob-node-label { font-size: 10px; font-weight: 700; color: #475569; white-space: nowrap; transition: color 0.25s ease; }
-  .byob-node.byob-active .byob-node-label { color: var(--byob-green); }
-
-  .byob-message {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--byob-text);
-    background: var(--byob-orange-bg);
-    border: 1px solid rgba(194, 65, 12, 0.15);
-    border-radius: 6px;
-    padding: 5px 10px;
-    margin-top: 2px;
-  }
-
-  .byob-message.byob-message-maxed {
-    color: var(--byob-text);
-    background: var(--byob-green-light);
-    border-color: var(--byob-green);
-  }
-
-  .byob-right { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
-
-  .byob-price-block { text-align: right; white-space: nowrap; }
-  .byob-price-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--byob-subtext); margin-bottom: 1px; }
-  .byob-original-price {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--byob-grey-dark);
-    text-decoration: line-through;
-    line-height: 1.2;
-  }
-  .byob-final-price { font-size: 20px; font-weight: 800; color: var(--byob-text); line-height: 1.2; }
-  .byob-savings-line {
-    display: block;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--byob-green);
-    background: none;
-    border-radius: 0;
-    padding: 0;
-    margin-top: 3px;
-    letter-spacing: 0.02em;
-  }
-  .byob-savings-line.byob-savings-hidden { display: none; }
-
-  .byob-price-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
-
-  /* Decorative chevron next to Bundle Value, shown on both mobile and desktop now.
-     Visual only — doesn't expand/collapse anything yet. */
+ .byob-node-circle { width: 24px; height: 24px; border-radius: 50%; background: var(--byob-grey); border: 2px solid var(--byob-grey); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #334155; box-sizing: border-box; transition: all 0.25s ease; }
+ .byob-node.byob-active .byob-node-circle { background: var(--byob-green); border-color: var(--byob-green); color: #fff; }
+ .byob-node.byob-current .byob-node-circle, .byob-node.byob-maxed .byob-node-circle { box-shadow: 0 0 0 4px var(--byob-green-light); transform: scale(1.12); }
+ .byob-node-label { font-size: 10px; font-weight: 700; color: #475569; white-space: nowrap; transition: color 0.25s ease; }
+ .byob-node.byob-active .byob-node-label { color: var(--byob-green); }
+ .byob-message { text-align: center; font-size: 12px; font-weight: 700; color: var(--byob-text); background: var(--byob-orange-bg); border: 1px solid rgba(194, 65, 12, 0.15); border-radius: 6px; padding: 5px 10px; margin-top: 2px; }
+ .byob-message.byob-message-maxed { color: var(--byob-text); background: var(--byob-green-light); border-color: var(--byob-green); }
+ .byob-right { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
+ .byob-price-block { text-align: right; white-space: nowrap; }
+ .byob-price-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--byob-subtext); margin-bottom: 1px; }
+ .byob-original-price { font-size: 12px; font-weight: 500; color: var(--byob-grey-dark); text-decoration: line-through; line-height: 1.2; }
+ .byob-final-price { font-size: 20px; font-weight: 800; color: var(--byob-text); line-height: 1.2; }
+ .byob-savings-line { display: block; font-size: 12px; font-weight: 800; color: var(--byob-green); background: none; border-radius: 0; padding: 0; margin-top: 3px; letter-spacing: 0.02em; }
+ .byob-savings-line.byob-savings-hidden { display: none; }
+ .byob-price-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
   .byob-value-chevron { display: inline-block; font-size: 13px; color: var(--byob-subtext); line-height: 1; }
-
-  /* Highlighted portion of the milestone message (e.g. "10% OFF"). On desktop this
-     inherits the same orange as the rest of the message, so it's a no-op visually
-     until the mobile override below recolors the surrounding text. */
-  .byob-message-highlight { color: var(--byob-orange-text); font-weight: 800; }
-  .byob-message-maxed .byob-message-highlight { color: var(--byob-green); }
-
-  .byob-cta-block { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-
-  .byob-view-bundle-btn {
-    background: var(--byob-green);
-    color: #fff;
-    border: none;
-    padding: 12px 22px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 10px rgba(27, 94, 32, 0.25);
-  }
-
-  .byob-view-bundle-btn:disabled {
-    background: var(--byob-green-light);
-    color: var(--byob-green);
-    border: 1px solid var(--byob-green);
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-    opacity: 0.85;
-  }
-  .byob-view-bundle-btn:not(:disabled):hover {
-    filter: brightness(1.12);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 18px rgba(27, 94, 32, 0.35);
-  }
-
-  .byob-continue-shopping {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--byob-green);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    transition: opacity 0.2s;
-  }
-  .byob-continue-shopping:hover { opacity: 0.75; }
-
-  /* ============ MOBILE (≤768px) ============ */
+ .byob-message-highlight { color: var(--byob-orange-text); font-weight: 800; }
+ .byob-message-maxed .byob-message-highlight { color: var(--byob-green); }
+  .byob-modal-bundle-box .byob-message, .byob-modal-bundle-box .byob-message.byob-message-maxed { margin-top: 12px; text-align: left; background: none; border: none; padding: 0; color: var(--byob-text); }
+ .byob-modal-bundle-box .byob-message-highlight { color: var(--byob-text); text-decoration: underline; }
+ .byob-cta-block { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+ .byob-view-bundle-btn { background: var(--byob-green); color: #fff; border: none; padding: 12px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap; transition: all 0.2s ease; box-shadow: 0 2px 10px rgba(27, 94, 32, 0.25); }
+ .byob-view-bundle-btn:disabled { background: var(--byob-green-light); color: var(--byob-green); border: 1px solid var(--byob-green); cursor: not-allowed; transform: none; box-shadow: none; opacity: 0.85; }
+ .byob-view-bundle-btn:not(:disabled):hover { filter: brightness(1.12); transform: translateY(-2px); box-shadow: 0 5px 18px rgba(27, 94, 32, 0.35); }
+ .byob-continue-shopping { font-size: 11px; font-weight: 700; color: var(--byob-green); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; background: none; border: none; padding: 0; transition: opacity 0.2s; }
+ .byob-continue-shopping:hover { opacity: 0.75; }
   @media screen and (max-width: 768px) {
-
-    /* --- Section: clamp to viewport, no horizontal scroll --- */
-    .byob-section {
-      width: 100%;
-      max-width: 100vw;
-      padding: 16px 12px 140px; /* bottom pad keeps cards above the floating bar */
-      overflow-x: hidden;
-    }
-
-    /* --- Grid: 2 explicit columns using calc so they always fit ---
-       Formula: (100% - gap) / 2 where 100% = parent width after padding.
-       Using grid-template-columns directly avoids any minmax minimum-width trap. */
-    .byob-grid {
-      display: grid;
-      grid-template-columns: calc(50% - 4px) calc(50% - 4px);
-      gap: 8px;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-
-    /* Compact cards so they breathe nicely at ~160px wide */
-    .byob-product-card {
-      padding: 8px;
-      gap: 5px;
-      border-radius: 8px;
-    }
-    .byob-product-title { font-size: 11px; min-height: 26px; -webkit-line-clamp: 2; }
-    .byob-product-price { font-size: 12px; }
-    .byob-add-btn { font-size: 10.5px; padding: 6px 4px; }
-    .byob-selected-check { width: 18px; height: 18px; font-size: 10px; top: 6px; right: 6px; }
-
-    /* --- Sticky bar ---
-       Reworked to match the reference layout:
-         Row 1: bag/label (left) + bundle value (right)
-         Row 2: progress ladder + message (full width)
-         Row 3: full-width "View Bundle" button
-         Row 4: centered "Continue Shopping" link
-       .byob-right no longer wraps its own row — display:contents lets its
-       two children (.byob-price-block and .byob-cta-block) become direct
-       flex items of the bar so each can be placed independently. */
-    #byob-bottom-bar-{{ block.id }} {
-      flex-wrap: wrap;
-      align-items: center;
-      row-gap: 10px;
-      padding: 12px 14px 14px;
-    }
-
-    .byob-left { order: 1; flex: 1 1 auto; gap: 10px; }
-
-    .byob-right { display: contents; }
-
-    .byob-price-block { order: 2; text-align: right; flex: 0 0 auto; }
-    .byob-original-price { font-size: 11px; }
-    .byob-final-price { font-size: 16px; }
-    .byob-savings-line { font-size: 11.5px; margin-top: 2px; }
-
-    .byob-center {
-      order: 3;
-      flex: 1 1 100%;
-      max-width: none;
-      gap: 3px;
-    }
-
-    .byob-mobile-progress-label { display: block; }
-
-    /* Keep node labels visible but smaller — this is what the user wants. */
-    .byob-node-label {
-      display: block;
-      font-size: 8.5px;
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 100%;
-      text-align: center;
-    }
-
-    /* Smaller circles but still legible (colors now come from the base rules above). */
-    .byob-node-circle {
-      width: 20px;
-      height: 20px;
-      font-size: 9px;
-      border-width: 1.5px;
-    }
-
-    .byob-ladder-track { top: 9px; left: 10px; right: 10px; }
-    .byob-ladder-track-fill { height: 2px; }
-
-    .byob-node.byob-current .byob-node-circle,
-    .byob-node.byob-maxed .byob-node-circle {
-      box-shadow: 0 0 0 3px var(--byob-green-light);
-      transform: scale(1.1);
-    }
-
-    .byob-message { font-size: 10.5px; padding: 4px 8px; }
-
-    .byob-cta-block {
-      order: 4;
-      flex: 1 1 100%;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 8px;
-      margin-top: 2px;
-    }
-
-    .byob-view-bundle-btn {
-      width: 100%;
-      padding: 12px 14px;
-      font-size: 13px;
-    }
-
-    .byob-continue-shopping {
-      align-self: center;
-      font-size: 11px;
-    }
-  }
-
-  /* ============ VERY SMALL (≤380px) ============ */
+  .byob-section { width: 100%; max-width: 100vw; padding: 16px 12px 140px; overflow-x: hidden; }
+    .byob-grid { display: grid; grid-template-columns: calc(50% - 4px) calc(50% - 4px); gap: 8px; width: 100%; max-width: 100%; box-sizing: border-box; }
+  .byob-product-card { padding: 8px; gap: 5px; border-radius: 8px; }
+  .byob-product-title { font-size: 11px; min-height: 26px; -webkit-line-clamp: 2; }
+  .byob-product-price { font-size: 12px; }
+  .byob-add-btn { font-size: 10.5px; padding: 6px 4px; }
+  .byob-selected-check { width: 18px; height: 18px; font-size: 10px; top: 6px; right: 6px; }
+    #byob-bottom-bar-{{ block.id }} { flex-wrap: wrap; align-items: center; row-gap: 10px; padding: 12px 14px 14px; }
+  .byob-left { order: 1; flex: 1 1 auto; gap: 10px; }
+  .byob-right { display: contents; }
+  .byob-price-block { order: 2; text-align: right; flex: 0 0 auto; }
+  .byob-original-price { font-size: 11px; }
+  .byob-final-price { font-size: 16px; }
+  .byob-savings-line { font-size: 11.5px; margin-top: 2px; }
+  .byob-center { order: 3; flex: 1 1 100%; max-width: none; gap: 3px; }
+  .byob-mobile-progress-label { display: block; }
+  .byob-node-label { display: block; font-size: 8.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
+  .byob-node-circle { width: 20px; height: 20px; font-size: 9px; border-width: 1.5px; }
+  .byob-ladder-track { top: 9px; left: 10px; right: 10px; }
+  .byob-ladder-track-fill { height: 2px; }
+  .byob-node.byob-current .byob-node-circle,
+  .byob-node.byob-maxed .byob-node-circle { box-shadow: 0 0 0 3px var(--byob-green-light); transform: scale(1.1); }
+  .byob-message { font-size: 10.5px; padding: 4px 8px; }
+  .byob-cta-block { order: 4; flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 2px; }
+  .byob-view-bundle-btn { width: 100%; padding: 12px 14px; font-size: 13px; }
+  .byob-continue-shopping { align-self: center; font-size: 11px; }
+ }
   @media screen and (max-width: 380px) {
-    .byob-price-label { display: none; }
-    .byob-final-price { font-size: 14px; }
-    .byob-node-label { font-size: 7.5px; }
-    .byob-node-circle { width: 18px; height: 18px; font-size: 8px; }
-    .byob-ladder-track { top: 8px; left: 9px; right: 9px; }
-  }
-  /* ============ LOAD MORE / SPINNER ============ */
-  .byob-load-more-wrap {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 28px 0 16px;
-  }
-  .byob-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--byob-green-light, #E8F5E9);
-    border-top-color: var(--byob-green, #1B5E20);
-    border-radius: 50%;
-    animation: byobSpin 0.7s linear infinite;
-  }
-  @keyframes byobSpin { to { transform: rotate(360deg); } }
-  .byob-load-more-text {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--byob-subtext, #64748B);
-    margin: 0;
-  }
-  /* Sentinel — invisible div at grid bottom that triggers infinite scroll */
+  .byob-price-label { display: none; }
+  .byob-final-price { font-size: 14px; }
+  .byob-node-label { font-size: 7.5px; }
+  .byob-node-circle { width: 18px; height: 18px; font-size: 8px; }
+  .byob-ladder-track { top: 8px; left: 9px; right: 9px; }
+ }
+  .byob-load-more-wrap { display: none; flex-direction: column; align-items: center; gap: 10px; padding: 28px 0 16px; }
+ .byob-spinner { width: 32px; height: 32px; border: 3px solid var(--byob-green-light, #E8F5E9); border-top-color: var(--byob-green, #1B5E20); border-radius: 50%; animation: byobSpin 0.7s linear infinite; }
+ @keyframes byobSpin { to { transform: rotate(360deg); } }
+ .byob-load-more-text { font-size: 12px; font-weight: 600; color: var(--byob-subtext, #64748B); margin: 0; }
   .byob-scroll-sentinel { height: 1px; }
 </style>
-
 <div class="byob-section" id="byob-block-{{ block.id }}">
-  {% if block.settings.heading != blank %}
-    <h2 class="byob-heading">{{ block.settings.heading }}</h2>
-  {% endif %}
-  {% if block.settings.subheading != blank %}
-    <p class="byob-sub">{{ block.settings.subheading }}</p>
-  {% endif %}
-
-  {% if byob_collection == blank or byob_collection.products.size == 0 %}
-    <p class="byob-sub">Select a collection with products in the section settings to display the bundle grid.</p>
-  {% else %}
-    <div class="byob-grid" data-byob-grid data-byob-section-id="{{ block.id }}"
-         data-byob-collection="{{ byob_collection_handle | escape }}"
-         data-byob-total="{{ byob_product_count }}">
-      {% for product in byob_collection.products %}
-        {% liquid
-          assign byob_variant = product.selected_or_first_available_variant
-
-          # Full image gallery for the popup carousel — every image on the product,
-          # not just the featured one.
-          capture byob_images_json
-            echo '['
-            for byob_img in product.images
-              unless forloop.first
-                echo ','
-              endunless
-              echo byob_img | image_url: width: 800 | json
-            endfor
-            echo ']'
-          endcapture
-
-          # Description with paragraph/list/line breaks preserved as literal
-          # newlines (using placeholders so strip_newlines doesn't wipe them
-          # out) so the popup can later split it into spec lines like
-          # "Color: Green" instead of one run-on sentence.
-          #
-          # Two different placeholders on purpose: </p> and </div> are real
-          # paragraph boundaries (what makes the description look properly
-          # spaced on the actual product page, via the browser's default
-          # paragraph margins) while <br>/</li> are just in-paragraph line
-          # breaks. Earlier this used ONE placeholder for everything, which
-          # collapsed every paragraph gap down to a single line break —
-          # that's exactly why the popup showed the description as one dense
-          # block while the real product page (rendering the untouched HTML,
-          # <p> margins and all) looked properly spaced. Paragraph breaks now
-          # become a double newline so they survive as an actual blank line.
-          #
-          # NOTE: each line inside this multi-statement liquid tag must be
-          # one complete statement — filters can't continue onto the next
-          # line here — so this is done as a chain of single-line
-          # re-assignments instead.
-          assign byob_desc_marked = product.description
-          assign byob_desc_marked = byob_desc_marked | replace: '</li>', '</li>%%BYOBNL%%'
-          assign byob_desc_marked = byob_desc_marked | replace: '<br>', '%%BYOBNL%%'
-          assign byob_desc_marked = byob_desc_marked | replace: '<br/>', '%%BYOBNL%%'
-          assign byob_desc_marked = byob_desc_marked | replace: '<br />', '%%BYOBNL%%'
-          assign byob_desc_marked = byob_desc_marked | replace: '</p>', '</p>%%BYOBPARA%%'
-          assign byob_desc_marked = byob_desc_marked | replace: '</div>', '</div>%%BYOBPARA%%'
-          assign byob_desc_marked = byob_desc_marked | strip_html | strip_newlines
-          assign byob_double_nl = newline | append: newline
-          assign byob_desc_final = byob_desc_marked | replace: '%%BYOBPARA%%', byob_double_nl
-          assign byob_desc_final = byob_desc_final | replace: '%%BYOBNL%%', newline
-        %}
-        {% if product.available %}
-        <div class="byob-product-card"
-             data-byob-product
-             data-byob-product-id="{{ product.id }}"
-             data-byob-variant-id="{{ byob_variant.id }}"
-             data-byob-price="{{ byob_variant.price }}"
-             data-byob-full-title="{{ product.title | escape }}"
-             data-byob-description="{{ byob_desc_final | escape }}"
-             data-byob-image-large="{{ product.featured_image | image_url: width: 800 }}"
-             data-byob-images="{{ byob_images_json | escape }}"
-             data-byob-product-url="{{ product.url | escape }}"
-             tabindex="0" role="button" aria-haspopup="dialog">
-          <div class="byob-selected-check">✓</div>
-          <div class="byob-product-image">
-            {% if product.featured_image %}
-              <img src="{{ product.featured_image | image_url: width: 300 }}"
-                   alt="{{ product.featured_image.alt | escape | default: product.title | escape }}"
-                   loading="lazy"
-                   width="300" height="300">
-            {% endif %}
-          </div>
-          <div class="byob-product-title">{{ product.title | truncate: 60 }}</div>
-          <div class="byob-product-price">{{ byob_variant.price | money }}</div>
-           <button type="button" class="byob-add-btn" data-byob-add-btn>
-            + Add to Bundle
-          </button>
-        </div>
-        {% endif %}
-      {% endfor %}
+ {% if block.settings.heading != blank %}
+  <h2 class="byob-heading">{{ block.settings.heading }}</h2>
+ {% endif %}
+ {% if block.settings.subheading != blank %}
+  <p class="byob-sub">{{ block.settings.subheading }}</p>
+ {% endif %}
+ {% if byob_collection == blank or byob_collection.products.size == 0 %}
+  <p class="byob-sub">Select a collection with products in the section settings to display the bundle grid.</p>
+ {% else %}
+  <div class="byob-grid" data-byob-grid data-byob-section-id="{{ block.id }}"
+    data-byob-collection="{{ byob_collection_handle | escape }}"
+    data-byob-total="{{ byob_product_count }}">
+   {% for product in byob_collection.products %}
+    {% liquid
+     assign byob_variant = product.selected_or_first_available_variant
+     # Full image gallery for the popup carousel — every image on the product,
+     # not just the featured one.
+     capture byob_images_json
+      echo '['
+      for byob_img in product.images
+       unless forloop.first
+        echo ','
+       endunless
+       echo byob_img | image_url: width: 800 | json
+      endfor
+      echo ']'
+     endcapture
+     # Raw description HTML, escaped for safe embedding in the attribute.
+     # The browser decodes it back to the original HTML when JS reads the
+     # attribute, so the popup can render it with innerHTML exactly like
+     # the product page renders {{ product.description }} — same
+     # paragraphs, same bold "Product Specifications" labels, etc.
+    %}
+    {% if product.available %}
+    <div class="byob-product-card"
+      data-byob-product
+      data-byob-product-id="{{ product.id }}"
+      data-byob-variant-id="{{ byob_variant.id }}"
+      data-byob-price="{{ byob_variant.price }}"
+      data-byob-compare-price="{% if byob_variant.compare_at_price > byob_variant.price %}{{ byob_variant.compare_at_price }}{% endif %}"
+      data-byob-full-title="{{ product.title | escape }}"
+      data-byob-description="{{ product.description | escape }}"
+      data-byob-image-large="{{ product.featured_image | image_url: width: 800 }}"
+      data-byob-images="{{ byob_images_json | escape }}"
+      data-byob-product-url="{{ product.url | escape }}"
+      tabindex="0" role="button" aria-haspopup="dialog">
+     <div class="byob-selected-check">✓</div>
+     <div class="byob-product-image">
+      {% if product.featured_image %}
+       <img src="{{ product.featured_image | image_url: width: 300 }}"
+         alt="{{ product.featured_image.alt | escape | default: product.title | escape }}"
+         loading="lazy"
+         width="300" height="300">
+      {% endif %}
+     </div>
+     <div class="byob-product-title">{{ product.title | truncate: 60 }}</div>
+     <div class="byob-product-price">{{ byob_variant.price | money }}</div>
+     <div class="byob-areviews-source areviews_product_item areviews_stars{{ product.id }}" data-product-id="{{ product.id }}" data-byob-areviews-source aria-hidden="true"></div>
+     <button type="button" class="byob-add-btn" data-byob-add-btn>
+      + Add to Bundle
+     </button>
     </div>
-
-    {%- comment -%}Sentinel + spinner — JS watches the sentinel with IntersectionObserver{%- endcomment -%}
-    <div class="byob-scroll-sentinel" id="byob-sentinel-{{ block.id }}"></div>
-    <div class="byob-load-more-wrap" id="byob-load-more-{{ block.id }}">
-      <div class="byob-spinner"></div>
-      <p class="byob-load-more-text">Loading more products…</p>
-    </div>
-
-    {%- comment -%}Product details popup — opened by clicking a card (not the Add button).{%- endcomment -%}
-    <div class="byob-modal-overlay" id="byob-modal-{{ block.id }}" data-byob-modal aria-hidden="true">
-      <div class="byob-modal" role="dialog" aria-modal="true" aria-labelledby="byob-modal-title-{{ block.id }}">
-        <button type="button" class="byob-modal-close" data-byob-modal-close aria-label="Close">&times;</button>
-
-        <div class="byob-modal-media">
-          <div class="byob-modal-carousel" data-byob-carousel>
-            <div class="byob-modal-carousel-track" data-byob-carousel-track></div>
-            <button type="button" class="byob-modal-carousel-arrow byob-modal-carousel-prev" data-byob-carousel-prev aria-label="Previous image" hidden>&#8249;</button>
-            <button type="button" class="byob-modal-carousel-arrow byob-modal-carousel-next" data-byob-carousel-next aria-label="Next image" hidden>&#8250;</button>
-          </div>
-          <div class="byob-modal-carousel-dots" data-byob-carousel-dots hidden></div>
-          {%- comment -%}
-            Plain link to the product page's own reviews, not a rebuilt
-            star widget. Confirmed (via live code + rendered-HTML
-            inspection) that AReviews renders per-product as a Theme App
-            Extension app block computed server-side on AReviews' own
-            backend — its rating/count data is never exposed in theme
-            Liquid, page source, or the widget's JS bundle, and the
-            store's generic "reviews.rating" / "reviews.rating_count"
-            metafields only exist on a small legacy subset of products
-            (not written by AReviews), which is why stars looked
-            inconsistent. There's no reliable per-product rating data
-            this custom grid can read, so we link out to the real
-            AReviews widget on the product page instead of faking one.
-            If AReviews later exposes a metafield sync (check the app's
-            own admin settings, or ask their support) this can be
-            revisited.
-          {%- endcomment -%}
-          <a class="byob-modal-reviews-link" data-byob-reviews-link href="#" target="_blank" rel="noopener">★ See customer reviews</a>
-          {%- comment -%}
-            Lives here (media column) rather than at the end of the text
-            column on purpose: with a long description + "Read more" expanded,
-            a button at the bottom of the text column could end up scrolled
-            out of view, costing a sale. Anchored under the images instead,
-            it's always visible no matter how long the description gets.
-          {%- endcomment -%}
-          <button type="button" class="byob-modal-add-btn" data-byob-modal-add-btn>+ Add to Bundle</button>
-        </div>
-
-        <div class="byob-modal-body">
-          <h3 class="byob-modal-title" id="byob-modal-title-{{ block.id }}" data-byob-modal-title></h3>
-          <div class="byob-modal-price" data-byob-modal-price></div>
-          <ul class="byob-modal-specs" data-byob-modal-specs hidden></ul>
-          <div class="byob-modal-desc-wrap">
-            <p class="byob-modal-desc" data-byob-modal-desc></p>
-            <button type="button" class="byob-modal-readmore" data-byob-modal-readmore hidden>Read more</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {% endif %}
-</div>
-
-<div id="byob-bottom-bar-{{ block.id }}" class="byob-hidden" data-byob-widget data-byob-section-id="{{ block.id }}">
-
-  <div class="byob-left">
-    <div class="byob-bag-wrap">
-      <svg class="byob-bag-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0v.75h2.487c.96 0 1.764.724 1.865 1.679l1.263 12A1.875 1.875 0 0 1 20.25 22.5H3.75a1.875 1.875 0 0 1-1.865-2.071l1.263-12a1.875 1.875 0 0 1 1.865-1.679H7.5V6Zm1.5.75h6V6a3 3 0 1 0-6 0v.75Zm-1.5 3.75a.75.75 0 0 1 1.5 0 3 3 0 1 0 6 0 .75.75 0 0 1 1.5 0 4.5 4.5 0 1 1-9 0Z" />
-      </svg>
-      <span class="byob-count-badge" data-byob-count>0</span>
-    </div>
-    <div class="byob-left-text">
-      <span class="byob-left-title">YOUR BUNDLE</span>
-      <span class="byob-left-subtitle"><span data-byob-item-count>0</span> ITEMS ADDED</span>
-    </div>
+    {% endif %}
+   {% endfor %}
   </div>
-
-  <div class="byob-center">
-    <div class="byob-mobile-progress-label" data-byob-mobile-progress>0 of {{ byob_max_items }} items</div>
-    <div class="byob-ladder" data-byob-ladder>
-      <div class="byob-ladder-track">
-        <div class="byob-ladder-track-fill" data-byob-track-fill></div>
+    <div class="byob-scroll-sentinel" id="byob-sentinel-{{ block.id }}"></div>
+  <div class="byob-load-more-wrap" id="byob-load-more-{{ block.id }}">
+   <div class="byob-spinner"></div>
+   <p class="byob-load-more-text">Loading more products…</p>
+  </div>
+    <div class="byob-modal-overlay" id="byob-modal-{{ block.id }}" data-byob-modal aria-hidden="true">
+   <div class="byob-modal" role="dialog" aria-modal="true" aria-labelledby="byob-modal-title-{{ block.id }}">
+    <button type="button" class="byob-modal-close" data-byob-modal-close aria-label="Close">&times;</button>
+    <div class="byob-modal-media">
+     <div class="byob-modal-carousel" data-byob-carousel>
+      <div class="byob-modal-carousel-track" data-byob-carousel-track></div>
+      <button type="button" class="byob-modal-carousel-arrow byob-modal-carousel-prev" data-byob-carousel-prev aria-label="Previous image" hidden>&#8249;</button>
+      <button type="button" class="byob-modal-carousel-arrow byob-modal-carousel-next" data-byob-carousel-next aria-label="Next image" hidden>&#8250;</button>
+     </div>
+     <div class="byob-modal-thumbs" data-byob-thumbs hidden></div>
+          <div class="byob-modal-reviews-card" data-byob-reviews-card hidden>
+      <div class="byob-modal-reviews-head">
+       <span class="byob-modal-reviews-title">What customers say</span>
+       <a class="byob-modal-reviews-seeall" data-byob-reviews-seeall href="#" target="_blank" rel="noopener">See all reviews &rarr;</a>
       </div>
-      <div class="byob-node" data-byob-node="1">
+      <div class="byob-modal-reviews-carousel">
+       <button type="button" class="byob-modal-reviews-arrow byob-modal-reviews-prev" data-byob-reviews-prev aria-label="Previous review" hidden>&#8249;</button>
+       <div class="byob-modal-reviews-track" data-byob-reviews-track></div>
+       <button type="button" class="byob-modal-reviews-arrow byob-modal-reviews-next" data-byob-reviews-next aria-label="Next review" hidden>&#8250;</button>
+      </div>
+     </div>
+    </div>
+    <div class="byob-modal-body">
+     <h3 class="byob-modal-title" id="byob-modal-title-{{ block.id }}" data-byob-modal-title></h3>
+          <div class="byob-modal-areviews" data-byob-areviews-wrap></div>
+     <a class="byob-modal-reviews-link" data-byob-reviews-link href="#" target="_blank" rel="noopener">See customer reviews</a>
+     <div class="byob-modal-price-row">
+      <span class="byob-modal-price" data-byob-modal-price></span>
+      <span class="byob-modal-compare-price" data-byob-modal-compare-price hidden></span>
+      <span class="byob-modal-discount-badge" data-byob-modal-discount-badge hidden></span>
+     </div>
+     <div class="byob-modal-desc-wrap">
+      <div class="byob-modal-desc" data-byob-modal-desc></div>
+      <button type="button" class="byob-modal-readmore" data-byob-modal-readmore hidden>Read more</button>
+     </div>
+          <div class="byob-modal-bundle-box" data-byob-modal-bundle>
+      <div class="byob-modal-bundle-head">
+       <div class="byob-modal-bundle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg></div>
+       <div>
+        <div class="byob-modal-bundle-title">Your Bundle</div>
+        <div class="byob-modal-bundle-count"><span data-byob-modal-item-count>0</span> items added</div>
+       </div>
+      </div>
+      <div class="byob-ladder byob-modal-ladder" data-byob-modal-ladder>
+       <div class="byob-ladder-track">
+        <div class="byob-ladder-track-fill" data-byob-modal-track-fill></div>
+       </div>
+       <div class="byob-node" data-byob-modal-node="1">
         <div class="byob-node-circle">1</div>
         <div class="byob-node-label">No discount</div>
-      </div>
-      <div class="byob-node" data-byob-node="2">
+       </div>
+       <div class="byob-node" data-byob-modal-node="2">
         <div class="byob-node-circle">2</div>
         <div class="byob-node-label">{{ byob_tier_2 }}% OFF</div>
-      </div>
-      <div class="byob-node" data-byob-node="3">
+       </div>
+       <div class="byob-node" data-byob-modal-node="3">
         <div class="byob-node-circle">3</div>
         <div class="byob-node-label">{{ byob_tier_3 }}% OFF</div>
-      </div>
-      <div class="byob-node" data-byob-node="4">
+       </div>
+       <div class="byob-node" data-byob-modal-node="4">
         <div class="byob-node-circle">4</div>
         <div class="byob-node-label">{{ byob_tier_4 }}% OFF</div>
-      </div>
-      <div class="byob-node" data-byob-node="5">
+       </div>
+       <div class="byob-node" data-byob-modal-node="5">
         <div class="byob-node-circle">5</div>
         <div class="byob-node-label">{{ byob_tier_5 }}% OFF</div>
-      </div>
-      <div class="byob-node" data-byob-node="6">
-        <div class="byob-node-circle">6</div>
+       </div>
+       <div class="byob-node" data-byob-modal-node="6">
+        <div class="byob-node-circle">6+</div>
         <div class="byob-node-label">{{ byob_tier_6 }}% OFF</div>
+       </div>
       </div>
-    </div>
-    <div class="byob-message" data-byob-message>
-      🎁 Add products to start building your bundle!
-    </div>
-  </div>
-
-  <div class="byob-right">
-    <div class="byob-price-block">
-      <div class="byob-price-label">Bundle Value</div>
-      <div class="byob-original-price" data-byob-original-price style="display:none;"></div>
-      <div class="byob-price-row">
-        <div class="byob-final-price" data-byob-final-price>—</div>
+      <div class="byob-message" data-byob-modal-message></div>
+     </div>
+     <span class="byob-modal-qty-label">Quantity</span>
+     <div class="byob-modal-actions-row">
+      <div class="byob-modal-qty-stepper">
+       <button type="button" data-byob-qty-minus aria-label="Decrease quantity">&minus;</button>
+       <span data-byob-qty-value>1</span>
+       <button type="button" data-byob-qty-plus aria-label="Increase quantity">+</button>
       </div>
-      <div class="byob-savings-line byob-savings-hidden" data-byob-savings-line></div>
+      <button type="button" class="byob-modal-add-btn" data-byob-modal-add-btn>+ Add to Bundle</button>
+     </div>
+     <p class="byob-modal-qty-note">ⓘ Counts as 1 product in your bundle (even if you buy more than 1 quantity).</p>
+     <div class="byob-modal-trust-strip">
+      <div class="byob-modal-trust-item">
+       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="10" width="16" height="9" rx="2" stroke="#3a6b1e" stroke-width="1.5"></rect><path d="M7 10V7a4 4 0 0 1 8 0v3" stroke="#3a6b1e" stroke-width="1.5" stroke-linecap="round"></path><circle cx="11" cy="14.5" r="1.5" fill="#3a6b1e"></circle></svg>
+       <div class="byob-modal-trust-text">
+        <span class="byob-modal-trust-label">Safe checkout</span>
+        <span class="byob-modal-trust-sub">UPI &middot; Cards &middot; COD</span>
+       </div>
+      </div>
+      <div class="byob-modal-trust-item">
+       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 8h16l-1.5 8H4.5L3 8Z" stroke="#3a6b1e" stroke-width="1.5" stroke-linejoin="round"></path><circle cx="8" cy="19" r="1.5" fill="#3a6b1e"></circle><circle cx="15" cy="19" r="1.5" fill="#3a6b1e"></circle><path d="M3 8L5 3h12l1 2" stroke="#3a6b1e" stroke-width="1.5" stroke-linecap="round"></path></svg>
+       <div class="byob-modal-trust-text">
+        <span class="byob-modal-trust-label">Free shipping</span>
+        <span class="byob-modal-trust-sub">Above &#8377;999</span>
+       </div>
+      </div>
+      <div class="byob-modal-trust-item">
+       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 4h14v10a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V4Z" stroke="#3a6b1e" stroke-width="1.5"></path><path d="M8 11l2 2 4-4" stroke="#3a6b1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+       <div class="byob-modal-trust-text">
+        <span class="byob-modal-trust-label">7-day returns</span>
+        <span class="byob-modal-trust-sub">Hassle-free</span>
+       </div>
+      </div>
+      <div class="byob-modal-trust-item">
+       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="#3a6b1e" stroke-width="1.5"></circle><path d="M11 7v4l3 2" stroke="#3a6b1e" stroke-width="1.5" stroke-linecap="round"></path></svg>
+       <div class="byob-modal-trust-text">
+        <span class="byob-modal-trust-label">Ships in 1&ndash;2 days</span>
+        <span class="byob-modal-trust-sub">All India delivery</span>
+       </div>
+      </div>
+     </div>
+          <div class="byob-modal-recs" data-byob-modal-recs hidden>
+      <div class="byob-modal-recs-head">
+       <div class="byob-modal-recs-head-left">
+        <span class="byob-modal-recs-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg></span>
+        <div>
+         <div class="byob-modal-recs-title">Complete your bundle</div>
+         <div class="byob-modal-recs-sub">Popular picks to go with this product</div>
+        </div>
+       </div>
+       {% if byob_collection.url %}
+        <a class="byob-modal-recs-seemore" href="{{ byob_collection.url }}">See more →</a>
+       {% endif %}
+      </div>
+      <div class="byob-modal-recs-track" data-byob-modal-recs-track></div>
+     </div>
     </div>
-    <div class="byob-cta-block">
-      <button class="byob-view-bundle-btn" data-byob-view-bundle type="button" disabled>
-        View Bundle (<span data-byob-cta-count>0</span>) →
-      </button>
-      <button class="byob-continue-shopping" data-byob-continue-shopping type="button">
-        Continue Shopping
-      </button>
-    </div>
+   </div>
   </div>
-
+ {% endif %}
 </div>
-
+<div id="byob-bottom-bar-{{ block.id }}" class="byob-hidden" data-byob-widget data-byob-section-id="{{ block.id }}">
+ <div class="byob-left">
+  <div class="byob-bag-wrap">
+   <svg class="byob-bag-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0v.75h2.487c.96 0 1.764.724 1.865 1.679l1.263 12A1.875 1.875 0 0 1 20.25 22.5H3.75a1.875 1.875 0 0 1-1.865-2.071l1.263-12a1.875 1.875 0 0 1 1.865-1.679H7.5V6Zm1.5.75h6V6a3 3 0 1 0-6 0v.75Zm-1.5 3.75a.75.75 0 0 1 1.5 0 3 3 0 1 0 6 0 .75.75 0 0 1 1.5 0 4.5 4.5 0 1 1-9 0Z" />
+   </svg>
+   <span class="byob-count-badge" data-byob-count>0</span>
+  </div>
+  <div class="byob-left-text">
+   <span class="byob-left-title">YOUR BUNDLE</span>
+   <span class="byob-left-subtitle"><span data-byob-item-count>0</span> ITEMS ADDED</span>
+  </div>
+ </div>
+ <div class="byob-center">
+  <div class="byob-mobile-progress-label" data-byob-mobile-progress>0 of {{ byob_max_items }} items</div>
+  <div class="byob-ladder" data-byob-ladder>
+   <div class="byob-ladder-track">
+    <div class="byob-ladder-track-fill" data-byob-track-fill></div>
+   </div>
+   <div class="byob-node" data-byob-node="1">
+    <div class="byob-node-circle">1</div>
+    <div class="byob-node-label">No discount</div>
+   </div>
+   <div class="byob-node" data-byob-node="2">
+    <div class="byob-node-circle">2</div>
+    <div class="byob-node-label">{{ byob_tier_2 }}% OFF</div>
+   </div>
+   <div class="byob-node" data-byob-node="3">
+    <div class="byob-node-circle">3</div>
+    <div class="byob-node-label">{{ byob_tier_3 }}% OFF</div>
+   </div>
+   <div class="byob-node" data-byob-node="4">
+    <div class="byob-node-circle">4</div>
+    <div class="byob-node-label">{{ byob_tier_4 }}% OFF</div>
+   </div>
+   <div class="byob-node" data-byob-node="5">
+    <div class="byob-node-circle">5</div>
+    <div class="byob-node-label">{{ byob_tier_5 }}% OFF</div>
+   </div>
+   <div class="byob-node" data-byob-node="6">
+    <div class="byob-node-circle">6</div>
+    <div class="byob-node-label">{{ byob_tier_6 }}% OFF</div>
+   </div>
+  </div>
+  <div class="byob-message" data-byob-message>
+   🎁 Add products to start building your bundle!
+  </div>
+ </div>
+ <div class="byob-right">
+  <div class="byob-price-block">
+   <div class="byob-price-label">Bundle Value</div>
+   <div class="byob-original-price" data-byob-original-price style="display:none;"></div>
+   <div class="byob-price-row">
+    <div class="byob-final-price" data-byob-final-price>—</div>
+   </div>
+   <div class="byob-savings-line byob-savings-hidden" data-byob-savings-line></div>
+  </div>
+  <div class="byob-cta-block">
+   <button class="byob-view-bundle-btn" data-byob-view-bundle type="button" disabled>
+    View Bundle (<span data-byob-cta-count>0</span>) →
+   </button>
+   <button class="byob-continue-shopping" data-byob-continue-shopping type="button">
+    Continue Shopping
+   </button>
+  </div>
+ </div>
+</div>
 <script>
 (function () {
-  'use strict';
-
-  var sectionId = {{ block.id | json }};
-
-  // ---------------------------------------------------------------
-  // CONFIG — pulled straight from the merchant's theme-editor settings
-  // ---------------------------------------------------------------
-  // BYOB_MILESTONE_COUNT: number of discount milestone nodes shown in the progress bar.
-  // There is NO hard cap — customers can add as many products as they like.
-  // The top-tier discount (tier 6) applies from 6 items onward indefinitely.
-  var BYOB_MILESTONE_COUNT = 6;
-  var BYOB_TIERS = [
-    { min: 1, discountPct: 0,                 label: 'No discount' },
-    { min: 2, discountPct: {{ byob_tier_2 }}, label: '{{ byob_tier_2 }}% OFF' },
-    { min: 3, discountPct: {{ byob_tier_3 }}, label: '{{ byob_tier_3 }}% OFF' },
-    { min: 4, discountPct: {{ byob_tier_4 }}, label: '{{ byob_tier_4 }}% OFF' },
-    { min: 5, discountPct: {{ byob_tier_5 }}, label: '{{ byob_tier_5 }}% OFF' },
-    { min: 6, discountPct: {{ byob_tier_6 }}, label: '{{ byob_tier_6 }}% OFF' }
-  ];
-
-  var barRoot = document.querySelector('[data-byob-widget][data-byob-section-id="' + sectionId + '"]');
-  var gridRoot = document.querySelector('[data-byob-grid][data-byob-section-id="' + sectionId + '"]');
-  if (!barRoot || !gridRoot) return;
-
-  var bar = {
-    countBadge:      barRoot.querySelector('[data-byob-count]'),
-    itemCountText:   barRoot.querySelector('[data-byob-item-count]'),
-    ctaCount:        barRoot.querySelector('[data-byob-cta-count]'),
-    nodes:           barRoot.querySelectorAll('[data-byob-node]'),
-    trackFill:       barRoot.querySelector('[data-byob-track-fill]'),
-    message:         barRoot.querySelector('[data-byob-message]'),
-    finalPrice:      barRoot.querySelector('[data-byob-final-price]'),
-    savingsLine:     barRoot.querySelector('[data-byob-savings-line]'),
-    viewBundleBtn:   barRoot.querySelector('[data-byob-view-bundle]'),
-    continueBtn:     barRoot.querySelector('[data-byob-continue-shopping]'),
-    originalPrice:   barRoot.querySelector('[data-byob-original-price]'),
-    mobileProgress:  barRoot.querySelector('[data-byob-mobile-progress]')
+ 'use strict';
+ var sectionId = {{ block.id | json }};
+ var byobCustomerId = {{ customer.id | default: 0 }};
+ var BYOB_MILESTONE_COUNT = 6;
+ var BYOB_TIERS = [
+  { min: 1, discountPct: 0,                 label: 'No discount' },
+  { min: 2, discountPct: {{ byob_tier_2 }}, label: '{{ byob_tier_2 }}% OFF' },
+  { min: 3, discountPct: {{ byob_tier_3 }}, label: '{{ byob_tier_3 }}% OFF' },
+  { min: 4, discountPct: {{ byob_tier_4 }}, label: '{{ byob_tier_4 }}% OFF' },
+  { min: 5, discountPct: {{ byob_tier_5 }}, label: '{{ byob_tier_5 }}% OFF' },
+  { min: 6, discountPct: {{ byob_tier_6 }}, label: '{{ byob_tier_6 }}% OFF' }
+ ];
+ var barRoot = document.querySelector('[data-byob-widget][data-byob-section-id="' + sectionId + '"]');
+ var gridRoot = document.querySelector('[data-byob-grid][data-byob-section-id="' + sectionId + '"]');
+ if (!barRoot || !gridRoot) return;
+ var bar = {
+  countBadge:      barRoot.querySelector('[data-byob-count]'),
+  itemCountText:   barRoot.querySelector('[data-byob-item-count]'),
+  ctaCount:        barRoot.querySelector('[data-byob-cta-count]'),
+  nodes:           barRoot.querySelectorAll('[data-byob-node]'),
+  trackFill:       barRoot.querySelector('[data-byob-track-fill]'),
+  message:         barRoot.querySelector('[data-byob-message]'),
+  finalPrice:      barRoot.querySelector('[data-byob-final-price]'),
+  savingsLine:     barRoot.querySelector('[data-byob-savings-line]'),
+  viewBundleBtn:   barRoot.querySelector('[data-byob-view-bundle]'),
+  continueBtn:     barRoot.querySelector('[data-byob-continue-shopping]'),
+  originalPrice:   barRoot.querySelector('[data-byob-original-price]'),
+  mobileProgress:  barRoot.querySelector('[data-byob-mobile-progress]')
+ };
+ var bundleItems = {};
+ function formatMoney(cents) {
+  if (window.Shopify && typeof window.Shopify.formatMoney === 'function' && window.theme_money_format) {
+   return window.Shopify.formatMoney(cents, window.theme_money_format);
+  }
+  return '₹' + (cents / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+ }
+ function getBundleCount() { return Object.keys(bundleItems).length; }
+ function getBundleTotalCents() {
+  var total = 0;
+  for (var id in bundleItems) {
+   if (bundleItems.hasOwnProperty(id)) total += bundleItems[id].priceCents * (bundleItems[id].qty || 1);
+  }
+  return total;
+ }
+ function getActiveTierIndex(itemCount) {
+  var activeIndex = -1;
+  for (var i = 0; i < BYOB_TIERS.length; i++) {
+   if (itemCount >= BYOB_TIERS[i].min) activeIndex = i;
+  }
+  return activeIndex;
+ }
+ function computeBundleState() {
+  var itemCount = getBundleCount();
+  var originalTotalCents = getBundleTotalCents();
+  var isMaxDiscountReached = itemCount >= BYOB_MILESTONE_COUNT;
+  var activeIndex = getActiveTierIndex(itemCount);
+  var activeTier = activeIndex >= 0 ? BYOB_TIERS[activeIndex] : null;
+  var discountPct = (activeTier && itemCount >= 2) ? activeTier.discountPct : 0;
+  var savingsCents = Math.round(originalTotalCents * discountPct / 100);
+  var finalTotalCents = originalTotalCents - savingsCents;
+  var fillPct = itemCount > 0 ? Math.min(((itemCount - 1) / (BYOB_MILESTONE_COUNT - 1)) * 100, 100) : 0;
+  var messageHTML, messageIsMaxed = false;
+  if (itemCount === 0) {
+   messageHTML = '🎁 Add products to start building your bundle!';
+  } else if (isMaxDiscountReached) {
+   var maxPct = BYOB_TIERS[BYOB_TIERS.length - 1].discountPct;
+   messageHTML = '🎉 <span class="byob-message-highlight">' + maxPct +
+    '% OFF</span> applied — keep adding products to grow your bundle!';
+   messageIsMaxed = true;
+  } else {
+   var nextTier = BYOB_TIERS[activeIndex + 1];
+   var itemsNeeded = nextTier.min - itemCount;
+   var itemWord = itemsNeeded === 1 ? 'product' : 'products';
+   messageHTML = '🔥 Add ' + itemsNeeded + ' more ' + itemWord + ' to unlock <span class="byob-message-highlight">' +
+    nextTier.label + '</span>!';
+  }
+  return {
+   itemCount: itemCount,
+   originalTotalCents: originalTotalCents,
+   isMaxDiscountReached: isMaxDiscountReached,
+   activeIndex: activeIndex,
+   activeTier: activeTier,
+   discountPct: discountPct,
+   savingsCents: savingsCents,
+   finalTotalCents: finalTotalCents,
+   fillPct: fillPct,
+   messageHTML: messageHTML,
+   messageIsMaxed: messageIsMaxed,
+   isFull: false // kept for state-snapshot shape; there's no cap in this version
   };
-
-  // Bundle state: Map of productId -> { variantId, priceCents }
-  // Nothing here touches the Shopify cart until "View Bundle" is clicked.
-  var bundleItems = {};
-
-  // Shopify prices are always in cents — format using the shop's money format.
-  function formatMoney(cents) {
-    if (window.Shopify && typeof window.Shopify.formatMoney === 'function' && window.theme_money_format) {
-      return window.Shopify.formatMoney(cents, window.theme_money_format);
-    }
-    // Fallback: simple rupee formatting if Shopify.formatMoney isn't loaded on this theme.
-    return '₹' + (cents / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+ }
+ function renderBundleUI() {
+  var state = computeBundleState();
+  var itemCount = state.itemCount;
+  var originalTotalCents = state.originalTotalCents;
+  var isMaxDiscountReached = state.isMaxDiscountReached;
+  var activeIndex = state.activeIndex;
+  var discountPct = state.discountPct;
+  var savingsCents = state.savingsCents;
+  var finalTotalCents = state.finalTotalCents;
+  var isFull = state.isFull;
+  if (bar.countBadge) {
+   var prevCount = parseInt(bar.countBadge.textContent, 10) || 0;
+   bar.countBadge.textContent = itemCount;
+   if (itemCount !== prevCount) {
+    bar.countBadge.classList.remove('byob-bump');
+    void bar.countBadge.offsetWidth;
+    bar.countBadge.classList.add('byob-bump');
+   }
   }
-
-  function getBundleCount() { return Object.keys(bundleItems).length; }
-
-  function getBundleTotalCents() {
-    var total = 0;
-    for (var id in bundleItems) {
-      if (bundleItems.hasOwnProperty(id)) total += bundleItems[id].priceCents;
+  if (bar.itemCountText) bar.itemCountText.textContent = itemCount;
+  if (bar.ctaCount) bar.ctaCount.textContent = itemCount;
+  if (bar.mobileProgress) bar.mobileProgress.textContent = itemCount + ' items added';
+  bar.nodes.forEach(function (node) {
+   var nodeIndex = parseInt(node.getAttribute('data-byob-node'), 10);
+   node.classList.remove('byob-active', 'byob-current', 'byob-maxed');
+   if (nodeIndex <= Math.min(itemCount, BYOB_MILESTONE_COUNT) && itemCount > 0) {
+    node.classList.add('byob-active');
+    if (isMaxDiscountReached && nodeIndex === BYOB_MILESTONE_COUNT) {
+     node.classList.add('byob-maxed');
     }
-    return total;
-  }
-
-  function getActiveTierIndex(itemCount) {
-    var activeIndex = -1;
-    for (var i = 0; i < BYOB_TIERS.length; i++) {
-      if (itemCount >= BYOB_TIERS[i].min) activeIndex = i;
-    }
-    return activeIndex;
-  }
-
-  function renderBundleUI() {
-    var itemCount = getBundleCount();
-    var originalTotalCents = getBundleTotalCents();
-    // No hard cap — bundle is never 'full'
-    var isMaxDiscountReached = itemCount >= BYOB_MILESTONE_COUNT;
-    var isFull = false; // kept for state-snapshot shape below; there's no cap in this version
-
-    var activeIndex = getActiveTierIndex(itemCount);
-    var activeTier = activeIndex >= 0 ? BYOB_TIERS[activeIndex] : null;
-    // Only apply a non-zero discount when at least 2 items are in the bundle
-    var discountPct = (activeTier && itemCount >= 2) ? activeTier.discountPct : 0;
-    // Round to nearest integer cent to avoid floating-point drift
-    var savingsCents = Math.round(originalTotalCents * discountPct / 100);
-    var finalTotalCents = originalTotalCents - savingsCents;
-
-    // ---- Badge & counts ----
-    if (bar.countBadge) {
-      var prevCount = parseInt(bar.countBadge.textContent, 10) || 0;
-      bar.countBadge.textContent = itemCount;
-      if (itemCount !== prevCount) {
-        bar.countBadge.classList.remove('byob-bump');
-        void bar.countBadge.offsetWidth;
-        bar.countBadge.classList.add('byob-bump');
-      }
-    }
-    if (bar.itemCountText) bar.itemCountText.textContent = itemCount;
-    if (bar.ctaCount) bar.ctaCount.textContent = itemCount;
-    if (bar.mobileProgress) bar.mobileProgress.textContent = itemCount + ' items added';
-
-    // ---- Progress nodes ----
-    // Nodes 1-6 light up as products are added. At 6+ items all nodes are maxed.
-    bar.nodes.forEach(function (node) {
-      var nodeIndex = parseInt(node.getAttribute('data-byob-node'), 10);
-      node.classList.remove('byob-active', 'byob-current', 'byob-maxed');
-      if (nodeIndex <= Math.min(itemCount, BYOB_MILESTONE_COUNT) && itemCount > 0) {
-        node.classList.add('byob-active');
-        // Node 6 gets maxed styling once max discount is reached
-        if (isMaxDiscountReached && nodeIndex === BYOB_MILESTONE_COUNT) {
-          node.classList.add('byob-maxed');
-        }
-      }
-      // Current frontier node — only up to node 6
-      if (nodeIndex === itemCount && itemCount > 0 && !isMaxDiscountReached) {
-        node.classList.add('byob-current');
-      }
-    });
-
-    var fillPct = itemCount > 0 ? Math.min(((itemCount - 1) / (BYOB_MILESTONE_COUNT - 1)) * 100, 100) : 0;
-    if (bar.trackFill) bar.trackFill.style.width = fillPct + '%';
-
-    if (bar.message) {
-      bar.message.classList.remove('byob-message-maxed');
-      if (itemCount === 0) {
-        bar.message.textContent = '🎁 Add products to start building your bundle!';
-      } else if (isMaxDiscountReached) {
-        var maxPct = BYOB_TIERS[BYOB_TIERS.length - 1].discountPct;
-        bar.message.innerHTML = '🎉 <span class="byob-message-highlight">' + maxPct +
-          '% OFF</span> applied — keep adding products to grow your bundle!';
-        bar.message.classList.add('byob-message-maxed');
-      } else {
-        var nextTier = BYOB_TIERS[activeIndex + 1];
-        var itemsNeeded = nextTier.min - itemCount;
-        var itemWord = itemsNeeded === 1 ? 'product' : 'products';
-        bar.message.innerHTML = '🔥 Add ' + itemsNeeded + ' more ' + itemWord + ' to unlock <span class="byob-message-highlight">' +
-          nextTier.label + '</span>!';
-      }
-    }
-
-    if (itemCount === 0) {
-      if (bar.finalPrice) bar.finalPrice.textContent = '—';
-      if (bar.originalPrice) bar.originalPrice.style.display = 'none';
-      if (bar.savingsLine) {
-        bar.savingsLine.textContent = '';
-        bar.savingsLine.classList.add('byob-savings-hidden');
-      }
-    } else if (discountPct > 0 && savingsCents > 0) {
-      if (bar.originalPrice) {
-        bar.originalPrice.textContent = formatMoney(originalTotalCents);
-        bar.originalPrice.style.display = 'block';
-      }
-      if (bar.finalPrice) bar.finalPrice.textContent = formatMoney(finalTotalCents);
-      if (bar.savingsLine) {
-        bar.savingsLine.textContent = '🏷 You save ' + formatMoney(savingsCents);
-        bar.savingsLine.classList.remove('byob-savings-hidden');
-      }
-    } else {
-      if (bar.originalPrice) bar.originalPrice.style.display = 'none';
-      if (bar.finalPrice) bar.finalPrice.textContent = formatMoney(originalTotalCents);
-      if (bar.savingsLine) {
-        bar.savingsLine.textContent = '';
-        bar.savingsLine.classList.add('byob-savings-hidden');
-      }
-    }
-
-    if (bar.viewBundleBtn) bar.viewBundleBtn.disabled = itemCount === 0;
-
-    // Show bar only once at least 1 product is added; hide again if all removed.
-    if (itemCount > 0) {
-      barRoot.classList.remove('byob-hidden');
-    } else {
-      barRoot.classList.add('byob-hidden');
-    }
-
-    // ---- Card states ----
-    var cards = gridRoot.querySelectorAll('[data-byob-product]');
-    cards.forEach(function (card) {
-      if (card.hasAttribute('data-byob-soldout')) return; // never touch sold-out cards
-      var productId = card.getAttribute('data-byob-product-id');
-      var isSelected = bundleItems.hasOwnProperty(productId);
-      var btn = card.querySelector('[data-byob-add-btn]');
-
-      card.classList.toggle('byob-card-selected', isSelected);
-      // No 'bundle full' state — cards are never disabled due to a count cap
-      card.classList.remove('byob-card-disabled');
-
-      if (btn) {
-        if (isSelected) {
-          btn.textContent = '✓ Added';
-          btn.disabled = false;
-        } else {
-          btn.textContent = '+ Add to Bundle';
-          btn.disabled = false;
-        }
-      }
-    });
-
-    barRoot.__byobLastState = { itemCount: itemCount, originalTotalCents: originalTotalCents, discountPct: discountPct, savingsCents: savingsCents, finalTotalCents: finalTotalCents, isFull: isFull };
-
-    // Keep the details popup's Add button in sync if it's open while the
-    // bundle changes (e.g. user removes an item from the sticky bar).
-    if (typeof syncModalButton === 'function') syncModalButton();
-  }
-
-  function toggleProduct(card) {
-    var productId = card.getAttribute('data-byob-product-id');
-    var variantId = card.getAttribute('data-byob-variant-id');
-    var priceCents = parseInt(card.getAttribute('data-byob-price'), 10) || 0;
-
-    if (bundleItems.hasOwnProperty(productId)) {
-      delete bundleItems[productId];
-    } else {
-      // No cap — always allow adding new products
-      bundleItems[productId] = { variantId: variantId, priceCents: priceCents };
-    }
-    renderBundleUI();
-  }
-
-  gridRoot.addEventListener('click', function (e) {
-    var card = e.target.closest('[data-byob-product]');
-    if (!card) return;
-    var btn = e.target.closest('[data-byob-add-btn]');
-    if (btn) {
-      if (btn.disabled) return;
-      if (card.classList.contains('byob-card-disabled') || card.hasAttribute('data-byob-soldout')) return;
-      toggleProduct(card);
-      return;
-    }
-    // Click anywhere else on the card opens the details popup.
-    openProductModal(card);
+   }
+   if (nodeIndex === itemCount && itemCount > 0 && !isMaxDiscountReached) {
+    node.classList.add('byob-current');
+   }
   });
-
-  // Keyboard support: Enter/Space opens the popup when a card has focus
-  // (cards are tabbable via tabindex="0"), matching the click behavior above.
-  gridRoot.addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    if (e.target.closest('[data-byob-add-btn]')) return;
-    var card = e.target.closest('[data-byob-product]');
-    if (!card) return;
-    e.preventDefault();
-    openProductModal(card);
-  });
-
-  // ---------------------------------------------------------------
-  // PRODUCT DETAILS POPUP — opened by clicking/tapping a card.
-  // ---------------------------------------------------------------
-  var modalRoot          = document.getElementById('byob-modal-' + sectionId);
-  var modalTitle         = modalRoot && modalRoot.querySelector('[data-byob-modal-title]');
-  var modalPrice         = modalRoot && modalRoot.querySelector('[data-byob-modal-price]');
-  var modalSpecsList     = modalRoot && modalRoot.querySelector('[data-byob-modal-specs]');
-  var modalDesc          = modalRoot && modalRoot.querySelector('[data-byob-modal-desc]');
-  var modalReadMore      = modalRoot && modalRoot.querySelector('[data-byob-modal-readmore]');
-  var modalAddBtn        = modalRoot && modalRoot.querySelector('[data-byob-modal-add-btn]');
-  var modalCloseBtn      = modalRoot && modalRoot.querySelector('[data-byob-modal-close]');
-  var modalReviewsLink   = modalRoot && modalRoot.querySelector('[data-byob-reviews-link]');
-  var modalCarouselTrack = modalRoot && modalRoot.querySelector('[data-byob-carousel-track]');
-  var modalCarouselDots  = modalRoot && modalRoot.querySelector('[data-byob-carousel-dots]');
-  var modalCarouselPrev  = modalRoot && modalRoot.querySelector('[data-byob-carousel-prev]');
-  var modalCarouselNext  = modalRoot && modalRoot.querySelector('[data-byob-carousel-next]');
-  var modalCurrentCard   = null;
-  var modalFullDesc      = '';   // remaining description (specs lines stripped out) for the open card
-  var modalDescExpanded  = false;
-  var DESC_PREVIEW_LEN   = 220; // characters shown before "Read more" is needed
-  var carouselScrollTimer = null;
-
-  // ---- Specs extraction ----
-  // Descriptions aren't structured data — this looks for recognized labels
-  // like "Color:" / "Material -" and pulls them out as scannable facts
-  // instead of leaving them buried inside a paragraph. Anything that doesn't
-  // match stays in the flowing description below.
-  //
-  // Matching is deliberately CASE-SENSITIVE on the capitalized form of each
-  // label. That's not a style choice — these product descriptions often have
-  // no real whitespace between fields once their HTML is stripped (e.g. a
-  // merchant's rich-text editor renders "...plastic coating" and "Color:
-  // Black" as separate elements with no space between them, so stripping
-  // tags alone produces "coatingColor : Black" with zero separator to split
-  // on). Matching only the capitalized label lets us find "Color" glued to
-  // the end of the previous word and still insert a break in the right
-  // place — a case-insensitive match would also fire on stray lowercase
-  // words like "color" inside ordinary sentences.
-  var SPEC_LABELS = ['Wattage / Voltage', 'Country of Origin', 'Package Contents',
-    'Coverage Area', 'Cable Length', 'Item Dimensions', 'Item Weight',
-    'Light Colors', 'Light Colours', 'LED Count', 'IP Rating', 'Pack Size',
-    'Net Weight', 'Net Wt', 'Dimensions', 'Dimension', 'Wavelengths', 'Wavelength',
-    'Quantity', 'Material', 'Capacity', 'Warranty', 'Lifetime', 'Spectrum',
-    'Wattage', 'Voltage', 'Color', 'Colour', 'Weight', 'Finish', 'Brand',
-    'Model', 'Power', 'Pieces', 'Count', 'Size'];
-  // Longest first so a multi-word label (e.g. "Country of Origin") matches
-  // whole rather than being pre-empted by a shorter label it contains.
-  var SPEC_LABELS_SORTED = SPEC_LABELS.slice().sort(function (a, b) { return b.length - a.length; });
-  var ESCAPED_LABELS = SPEC_LABELS_SORTED.map(function (l) { return l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
-  var LABEL_BREAK_RE = new RegExp('(' + ESCAPED_LABELS.join('|') + ')\\s*[:\\-–]', 'g');
-  var SPEC_LINE_RE = new RegExp('^(' + ESCAPED_LABELS.join('|') + '):\\s*(.+?)\\s*$');
-
-  function extractSpecs(fullText) {
-    // Force a line break immediately before every recognized label,
-    // regardless of what (if anything) precedes it, and normalize the
-    // separator to ":" — this is what splits "coatingColor : Black" into
-    // "coating" and "Color: Black" even with no original whitespace at all.
-    var text = String(fullText || '').replace(LABEL_BREAK_RE, '\n$1:');
-    // IMPORTANT: split on a SINGLE '\n', not '\n+'. A blank line here is a
-    // real paragraph gap (Liquid/JS mark </p> and </div> boundaries with a
-    // double newline upstream) — collapsing runs of newlines into one, like
-    // this used to do, silently destroyed every paragraph gap and is why
-    // the popup rendered the whole description as one dense block while the
-    // real product page (raw HTML, real <p> margins) looked properly spaced.
-    var rawLines = text.split('\n');
-    var specs = [];
-    var remaining = [];
-    var pendingGap = false;
-    rawLines.forEach(function (line) {
-      var trimmed = line.trim();
-      if (!trimmed) {
-        // Remember there was a paragraph gap here, but only emit it once
-        // more real content follows — this drops leading/trailing blank
-        // lines and collapses multiple consecutive blanks into just one.
-        if (remaining.length) pendingGap = true;
-        return;
-      }
-      var m = trimmed.match(SPEC_LINE_RE);
-      if (m) {
-        // Spec lines are pulled into the specs box entirely — they never
-        // leave a gap behind in the flowing description.
-        specs.push({ label: m[1], value: m[2] });
-        return;
-      }
-      if (pendingGap) {
-        remaining.push('');
-        pendingGap = false;
-      }
-      remaining.push(trimmed);
-    });
-    return { specs: specs, remaining: remaining.join('\n') };
+  if (bar.trackFill) bar.trackFill.style.width = state.fillPct + '%';
+  if (bar.message) {
+   bar.message.classList.toggle('byob-message-maxed', state.messageIsMaxed);
+   bar.message.innerHTML = state.messageHTML;
   }
-
-  function renderModalSpecs(specs) {
-    if (!modalSpecsList) return;
-    modalSpecsList.innerHTML = '';
-    if (!specs.length) { modalSpecsList.hidden = true; return; }
-    specs.forEach(function (spec) {
-      var li = document.createElement('li');
-      var strong = document.createElement('strong');
-      strong.textContent = spec.label;
-      li.appendChild(strong);
-      li.appendChild(document.createTextNode(spec.value));
-      modalSpecsList.appendChild(li);
-    });
-    modalSpecsList.hidden = false;
+  if (itemCount === 0) {
+   if (bar.finalPrice) bar.finalPrice.textContent = '—';
+   if (bar.originalPrice) bar.originalPrice.style.display = 'none';
+   if (bar.savingsLine) {
+    bar.savingsLine.textContent = '';
+    bar.savingsLine.classList.add('byob-savings-hidden');
+   }
+  } else if (discountPct > 0 && savingsCents > 0) {
+   if (bar.originalPrice) {
+    bar.originalPrice.textContent = formatMoney(originalTotalCents);
+    bar.originalPrice.style.display = 'block';
+   }
+   if (bar.finalPrice) bar.finalPrice.textContent = formatMoney(finalTotalCents);
+   if (bar.savingsLine) {
+    bar.savingsLine.textContent = '🏷 You save ' + formatMoney(savingsCents);
+    bar.savingsLine.classList.remove('byob-savings-hidden');
+   }
+  } else {
+   if (bar.originalPrice) bar.originalPrice.style.display = 'none';
+   if (bar.finalPrice) bar.finalPrice.textContent = formatMoney(originalTotalCents);
+   if (bar.savingsLine) {
+    bar.savingsLine.textContent = '';
+    bar.savingsLine.classList.add('byob-savings-hidden');
+   }
   }
-
-  // Renders either the clamped preview or the full remaining description, and
-  // shows/hides the "Read more" toggle depending on whether it's actually needed.
-  function renderModalDesc() {
-    if (!modalDesc) return;
-    var text = modalFullDesc || 'No description available for this product.';
-    var needsToggle = modalFullDesc.length > DESC_PREVIEW_LEN;
-
-    if (!needsToggle) {
-      modalDesc.textContent = text;
-      if (modalReadMore) modalReadMore.hidden = true;
-      return;
-    }
-
-    if (modalDescExpanded) {
-      modalDesc.textContent = modalFullDesc;
-      if (modalReadMore) { modalReadMore.hidden = false; modalReadMore.textContent = 'Read less'; }
+  if (bar.viewBundleBtn) bar.viewBundleBtn.disabled = itemCount === 0;
+  if (itemCount > 0) {
+   barRoot.classList.remove('byob-hidden');
+  } else {
+   barRoot.classList.add('byob-hidden');
+  }
+  var cards = gridRoot.querySelectorAll('[data-byob-product]');
+  cards.forEach(function (card) {
+   if (card.hasAttribute('data-byob-soldout')) return; // never touch sold-out cards
+   var productId = card.getAttribute('data-byob-product-id');
+   var isSelected = bundleItems.hasOwnProperty(productId);
+   var btn = card.querySelector('[data-byob-add-btn]');
+   card.classList.toggle('byob-card-selected', isSelected);
+   card.classList.remove('byob-card-disabled');
+   if (btn) {
+    if (isSelected) {
+     var itemQty = bundleItems[productId].qty || 1;
+     btn.textContent = itemQty > 1 ? '✓ Added (×' + itemQty + ')' : '✓ Added';
+     btn.disabled = false;
     } else {
-      var preview = modalFullDesc.slice(0, DESC_PREVIEW_LEN).replace(/\s+\S*$/, '') + '…';
-      modalDesc.textContent = preview;
-      if (modalReadMore) { modalReadMore.hidden = false; modalReadMore.textContent = 'Read more'; }
+     btn.textContent = '+ Add to Bundle';
+     btn.disabled = false;
     }
-  }
-
-  if (modalReadMore) {
-    modalReadMore.addEventListener('click', function () {
-      modalDescExpanded = !modalDescExpanded;
-      renderModalDesc();
-    });
-  }
-
-  // ---- Carousel ----
-  function currentSlideIndex() {
-    if (!modalCarouselTrack || !modalCarouselTrack.clientWidth) return 0;
-    return Math.round(modalCarouselTrack.scrollLeft / modalCarouselTrack.clientWidth);
-  }
-
-  function goToSlide(index) {
-    if (!modalCarouselTrack) return;
-    modalCarouselTrack.scrollTo({ left: index * modalCarouselTrack.clientWidth, behavior: 'smooth' });
-  }
-
-  function updateActiveDot() {
-    if (!modalCarouselDots) return;
-    var index = currentSlideIndex();
-    var dots = modalCarouselDots.querySelectorAll('.byob-modal-carousel-dot');
-    dots.forEach(function (d, i) { d.classList.toggle('is-active', i === index); });
-  }
-
-  function buildCarousel(images, titleText) {
-    if (!modalCarouselTrack) return;
-    var list = (images && images.length) ? images : [];
-    modalCarouselTrack.innerHTML = '';
-    if (modalCarouselDots) modalCarouselDots.innerHTML = '';
-
-    list.forEach(function (src, i) {
-      var slide = document.createElement('div');
-      slide.className = 'byob-modal-carousel-slide';
-      if (src) {
-        var img = document.createElement('img');
-        img.src = src;
-        img.alt = titleText || '';
-        img.loading = 'lazy';
-        slide.appendChild(img);
-      }
-      modalCarouselTrack.appendChild(slide);
-
-      if (list.length > 1 && modalCarouselDots) {
-        var dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'byob-modal-carousel-dot' + (i === 0 ? ' is-active' : '');
-        dot.setAttribute('aria-label', 'Go to image ' + (i + 1));
-        dot.addEventListener('click', function () { goToSlide(i); });
-        modalCarouselDots.appendChild(dot);
-      }
-    });
-
-    var multi = list.length > 1;
-    if (modalCarouselPrev) modalCarouselPrev.hidden = !multi;
-    if (modalCarouselNext) modalCarouselNext.hidden = !multi;
-    if (modalCarouselDots) modalCarouselDots.hidden = !multi;
-    modalCarouselTrack.scrollLeft = 0;
-  }
-
-  if (modalCarouselPrev) {
-    modalCarouselPrev.addEventListener('click', function () {
-      goToSlide(Math.max(0, currentSlideIndex() - 1));
-    });
-  }
-  if (modalCarouselNext) {
-    modalCarouselNext.addEventListener('click', function () {
-      var total = modalCarouselTrack ? modalCarouselTrack.querySelectorAll('.byob-modal-carousel-slide').length : 0;
-      goToSlide(Math.min(total - 1, currentSlideIndex() + 1));
-    });
-  }
-  if (modalCarouselTrack) {
-    modalCarouselTrack.addEventListener('scroll', function () {
-      clearTimeout(carouselScrollTimer);
-      carouselScrollTimer = setTimeout(updateActiveDot, 80);
-    });
-  }
-
-  function syncModalButton() {
-    if (!modalAddBtn || !modalCurrentCard) return;
-    var soldOut = modalCurrentCard.hasAttribute('data-byob-soldout');
-    var isSelected = modalCurrentCard.classList.contains('byob-card-selected');
-    modalAddBtn.classList.toggle('is-added', isSelected && !soldOut);
-    if (soldOut) {
-      modalAddBtn.textContent = 'Sold Out';
-      modalAddBtn.disabled = true;
-    } else if (isSelected) {
-      modalAddBtn.textContent = '✓ Added';
-      modalAddBtn.disabled = false;
-    } else {
-      modalAddBtn.textContent = '+ Add to Bundle';
-      modalAddBtn.disabled = false;
-    }
-  }
-
-
-  function openProductModal(card) {
-    if (!modalRoot) return;
-    modalCurrentCard = card;
-    var priceEl = card.querySelector('.byob-product-price');
-    var imgEl = card.querySelector('.byob-product-image img');
-    var largeSrc = card.getAttribute('data-byob-image-large');
-    // Card markup truncates the title to ~60 characters for the grid layout
-    // (fixed-size cards); the popup uses the untruncated title stored here
-    // so "full details" actually means full details.
-    var titleEl = card.querySelector('.byob-product-title');
-    var titleText = card.getAttribute('data-byob-full-title') || (titleEl ? titleEl.textContent : '');
-
-    var rawDesc = card.getAttribute('data-byob-description') || '';
-    var parsed = extractSpecs(rawDesc);
-    modalFullDesc = parsed.remaining;
-    modalDescExpanded = false; // always start collapsed on a fresh card
-
-    // Full image gallery, falling back to the single large/grid image when the
-    // gallery attribute is missing, empty, or fails to parse.
-    var images = [];
-    var imagesRaw = card.getAttribute('data-byob-images');
-    if (imagesRaw) {
-      try { images = JSON.parse(imagesRaw) || []; } catch (e) { images = []; }
-    }
-    if (!images.length) {
-      var fallbackSrc = largeSrc || (imgEl ? imgEl.src : '');
-      if (fallbackSrc) images = [fallbackSrc];
-    }
-
-    if (modalTitle) modalTitle.textContent = titleText;
-    if (modalPrice) modalPrice.textContent = priceEl ? priceEl.textContent : '';
-    renderModalSpecs(parsed.specs);
-    renderModalDesc();
-    buildCarousel(images, titleText);
-
-    if (modalReviewsLink) {
-      var productUrl = card.getAttribute('data-byob-product-url');
-      if (productUrl) {
-        modalReviewsLink.href = productUrl;
-        modalReviewsLink.style.display = '';
-      } else {
-        // No product URL available (can happen for JSON-API-loaded cards on
-        // older data) — hide the link rather than pointing it nowhere.
-        modalReviewsLink.style.display = 'none';
-      }
-    }
-
-    syncModalButton();
-
-    modalRoot.classList.add('byob-modal-open');
-    modalRoot.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('byob-modal-locked');
-  }
-
-  function closeProductModal() {
-    if (!modalRoot) return;
-    modalRoot.classList.remove('byob-modal-open');
-    modalRoot.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('byob-modal-locked');
-    modalCurrentCard = null;
-  }
-
-  if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeProductModal);
-  if (modalRoot) {
-    // Click on the dark backdrop (not the panel itself) closes the popup.
-    modalRoot.addEventListener('click', function (e) {
-      if (e.target === modalRoot) closeProductModal();
-    });
-  }
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modalRoot && modalRoot.classList.contains('byob-modal-open')) {
-      closeProductModal();
-    }
+   }
   });
-  if (modalAddBtn) {
-    modalAddBtn.addEventListener('click', function () {
-      if (!modalCurrentCard || modalAddBtn.disabled) return;
-      toggleProduct(modalCurrentCard);
-      syncModalButton();
-    });
+  barRoot.__byobLastState = { itemCount: itemCount, originalTotalCents: originalTotalCents, discountPct: discountPct, savingsCents: savingsCents, finalTotalCents: finalTotalCents, isFull: isFull };
+  if (typeof syncModalButton === 'function') syncModalButton();
+  if (typeof renderModalBundleSection === 'function') renderModalBundleSection(state);
+  if (typeof syncRecommendations === 'function') syncRecommendations();
+ }
+ function toggleProduct(card, qty) {
+  var productId = card.getAttribute('data-byob-product-id');
+  var variantId = card.getAttribute('data-byob-variant-id');
+  var priceCents = parseInt(card.getAttribute('data-byob-price'), 10) || 0;
+  if (bundleItems.hasOwnProperty(productId)) {
+   delete bundleItems[productId];
+  } else {
+   bundleItems[productId] = { variantId: variantId, priceCents: priceCents, qty: qty || 1 };
   }
-
-  function addBundleToCart() {
-    var items = [];
-    for (var id in bundleItems) {
-      if (bundleItems.hasOwnProperty(id)) {
-        items.push({
-          id: parseInt(bundleItems[id].variantId, 10),
-          quantity: 1,
-          properties: { '_byob_bundle': 'true' }
-        });
-      }
-    }
-    if (items.length === 0) return;
-
-    bar.viewBundleBtn.disabled = true;
-    var originalLabel = bar.viewBundleBtn.innerHTML;
-    bar.viewBundleBtn.textContent = 'Adding…';
-
-    fetch(window.Shopify.routes.root + 'cart/add.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: items })
-    })
-      .then(function (res) {
-        if (!res.ok) return res.json().then(function (err) { throw new Error(err.description || 'Cart error'); });
-        return res.json();
-      })
-      .then(function () {
-        document.dispatchEvent(new CustomEvent('cart:updated'));
-        window.location.href = window.Shopify.routes.root + 'cart';
-      })
-      .catch(function (err) {
-        console.error('BYOB: failed to add bundle to cart', err);
-        alert('Could not add bundle to cart: ' + err.message);
-        bar.viewBundleBtn.disabled = false;
-        bar.viewBundleBtn.innerHTML = originalLabel;
-      });
-  }
-
-  if (bar.viewBundleBtn) bar.viewBundleBtn.addEventListener('click', addBundleToCart);
-  if (bar.continueBtn) {
-    bar.continueBtn.addEventListener('click', function () {
-      if (gridRoot) {
-        gridRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-  }
-
-  // Public API for driving selection from outside this grid (e.g. a PDP quick-add block)
-  window['BYOB_' + sectionId] = {
-    addProduct: function (productId, variantId, priceCents) {
-      var card = gridRoot.querySelector('[data-byob-product-id="' + productId + '"]');
-      if (card) { toggleProduct(card); return; }
-      if (!bundleItems.hasOwnProperty(productId)) {
-        bundleItems[productId] = { variantId: variantId, priceCents: priceCents };
-        renderBundleUI();
-      }
-    },
-    removeProduct: function (productId) {
-      if (bundleItems.hasOwnProperty(productId)) {
-        delete bundleItems[productId];
-        renderBundleUI();
-      }
-    },
-    getState: function () { return barRoot.__byobLastState; }
-  };
-
-  // ---------------------------------------------------------------
-  // LOAD ALL PRODUCTS — Liquid hard-caps at 50; fetch the rest via
-  // the Shopify Collection Products JSON API using IntersectionObserver
-  // (industry-standard infinite scroll — no extra page loads, no pagination UI).
-  // ---------------------------------------------------------------
-  var collectionHandle = gridRoot.getAttribute('data-byob-collection');
-  var totalProducts    = parseInt(gridRoot.getAttribute('data-byob-total'), 10) || 0;
-  var API_PAGE_SIZE    = 250;   // Shopify JSON API max per request
-  var currentApiPage   = 1;     // we start at page 1; the DOM-duplicate guard handles Liquid overlap
-  var allLoaded        = false;
-  var isFetching       = false;
-  var loaderWrap       = document.getElementById('byob-load-more-' + sectionId);
-  var sentinel         = document.getElementById('byob-sentinel-' + sectionId);
-
-  // Price in Shopify's JSON products API is a decimal string ("199.00")
-  // Convert to integer cents to match what Liquid outputs.
-  function parsePriceCents(priceStr) {
-    return Math.round(parseFloat(priceStr || '0') * 100);
-  }
-
-  // Product descriptions from the JSON API come back as raw HTML (body_html).
-  // Block-level boundaries (list items, line breaks, paragraphs) become real
-  // newlines BEFORE the remaining tags are stripped, so the popup's spec
-  // parser (which looks for "Color: Green" on its own line) has line breaks
-  // to work with instead of one run-on sentence. Matches what the Liquid-side
-  // extraction does for server-rendered cards — including marking </p> and
-  // </div> as an actual paragraph gap (double newline) rather than just
-  // another single line break, so a description with real paragraphs still
-  // reads as separated paragraphs in the popup instead of one dense block.
-  function stripHtmlToText(html, maxLen) {
-    if (!html) return '';
-    var PARA = 'BYOB_PARA'; // internal marker, stripped out below
-    var text = String(html)
-      .replace(/<\/li\s*>/gi, '</li>\n')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p\s*>/gi, '</p>\n' + PARA + '\n')
-      .replace(/<\/div\s*>/gi, '</div>\n' + PARA + '\n')
-      .replace(/<[^>]*>/g, ' ')
-      .split('\n')
-      .map(function (line) { return line.replace(/[ \t]+/g, ' ').trim(); })
-      // Drop genuinely empty lines (stray whitespace/indentation from the
-      // source HTML) but keep the PARA marker line — it's a deliberate
-      // paragraph boundary, not incidental whitespace.
-      .filter(function (line) { return line.length > 0; })
-      .join('\n')
-      // Each surviving PARA marker is now flanked by the real newlines from
-      // the join above ("...\nBYOB_PARA\n..."); removing just the marker
-      // text turns that into "...\n\n...", i.e. one real blank line.
-      .split(PARA).join('');
-    if (maxLen && text.length > maxLen) text = text.slice(0, maxLen).replace(/\s+\S*$/, '') + '...';
-    return text;
-  }
-
-  function buildCard(product) {
-    var firstAvailableVariant = null;
-    if (product.variants && product.variants.length > 0) {
-      for (var i = 0; i < product.variants.length; i++) {
-        if (product.variants[i].available !== false) {
-          firstAvailableVariant = product.variants[i];
-          break;
-        }
-      }
-    }
-    var variant = firstAvailableVariant || (product.variants && product.variants[0]);
-    if (!variant) return null;
-
-    var priceCents = parsePriceCents(variant.price);
-    var available = (typeof product.available === 'boolean')
-      ? product.available
-      : (variant.available !== false);
-
-    var title = (product.title || '').slice(0, 60);
-
-    // Image URL: use Shopify CDN size suffix
-    var imgSrc = '';
-    var rawSrc = '';
-    if (product.featured_image) {
-      rawSrc = (typeof product.featured_image === 'string')
-        ? product.featured_image
-        : (product.featured_image.src || '');
-    } else if (product.images && product.images.length > 0) {
-      rawSrc = (typeof product.images[0] === 'string')
-        ? product.images[0]
-        : (product.images[0].src || '');
-    }
-
-    if (rawSrc) {
-      imgSrc = rawSrc
-        .replace(/\.jpg(\?.*)?$/, '_300x300.jpg$1')
-        .replace(/\.jpeg(\?.*)?$/, '_300x300.jpeg$1')
-        .replace(/\.png(\?.*)?$/, '_300x300.png$1')
-        .replace(/\.webp(\?.*)?$/, '_300x300.webp$1');
-      if (imgSrc.startsWith('//')) imgSrc = 'https:' + imgSrc;
-    }
-    // Resize a raw Shopify CDN image src using the standard filename-suffix
-    // convention (shared by the single "large" image and the full gallery).
-    function toSizedUrl(src, size) {
-      if (!src) return '';
-      var sized = src
-        .replace(/\.jpg(\?.*)?$/, '_' + size + 'x' + size + '.jpg$1')
-        .replace(/\.jpeg(\?.*)?$/, '_' + size + 'x' + size + '.jpeg$1')
-        .replace(/\.png(\?.*)?$/, '_' + size + 'x' + size + '.png$1')
-        .replace(/\.webp(\?.*)?$/, '_' + size + 'x' + size + '.webp$1');
-      return sized.startsWith('//') ? 'https:' + sized : sized;
-    }
-
-    // Larger version of the same image for the details popup.
-    var imgSrcLarge = rawSrc ? toSizedUrl(rawSrc, 800) : '';
-
-    // Full image gallery for the popup carousel — every image on the product,
-    // not just the featured one (matches the Liquid-rendered cards).
-    var galleryUrls = [];
-    if (product.images && product.images.length) {
-      galleryUrls = product.images.map(function (im) {
-        var s = (typeof im === 'string') ? im : (im.src || '');
-        return toSizedUrl(s, 800);
-      }).filter(function (s) { return !!s; });
-    }
-    if (!galleryUrls.length && imgSrcLarge) galleryUrls = [imgSrcLarge];
-
-    var productUrl = product.handle
-      ? (window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/') + 'products/' + product.handle
-      : '';
-
-    var card = document.createElement('div');
-    card.className = 'byob-product-card' + (available ? '' : ' byob-card-soldout');
-    card.setAttribute('data-byob-product', '');
-    card.setAttribute('data-byob-product-id', String(product.id));
-    card.setAttribute('data-byob-variant-id', String(variant.id));
-    card.setAttribute('data-byob-price', String(priceCents));
-    card.setAttribute('data-byob-full-title', product.title || '');
-    // Full (untruncated) description — the popup clamps/expands this itself via
-    // the "Read more" toggle, so the raw data attribute should hold everything.
-    card.setAttribute('data-byob-description', stripHtmlToText(product.body_html));
-    card.setAttribute('data-byob-image-large', imgSrcLarge);
-    card.setAttribute('data-byob-images', JSON.stringify(galleryUrls));
-    if (productUrl) card.setAttribute('data-byob-product-url', productUrl);
-    card.setAttribute('tabindex', '0');
-    card.setAttribute('role', 'button');
-    card.setAttribute('aria-haspopup', 'dialog');
-    if (!available) card.setAttribute('data-byob-soldout', 'true');
-
-    var imgHtml = imgSrc
-      ? '<img src="' + imgSrc + '" alt="' + title.replace(/"/g, '&quot;') + '" loading="lazy" width="300" height="300">'
-      : '';
-
-    card.innerHTML =
-      '<div class="byob-selected-check">✓</div>' +
-      '<div class="byob-product-image">' + imgHtml + '</div>' +
-      '<div class="byob-product-title">' + title + '</div>' +
-      '<div class="byob-product-price">' + formatMoney(priceCents) + '</div>' +
-      '<button type="button" class="byob-add-btn" data-byob-add-btn' + (available ? '' : ' disabled') + '>' +
-        (available ? '+ Add to Bundle' : 'Sold Out') +
-      '</button>';
-
-    return card;
-  }
-
-  function fetchNextPage() {
-    if (isFetching || allLoaded || !collectionHandle) return;
-    isFetching = true;
-    if (loaderWrap) loaderWrap.style.display = 'flex';
-
-    var url = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/') +
-              'collections/' + collectionHandle +
-              '/products.json?limit=' + API_PAGE_SIZE + '&page=' + currentApiPage;
-
-    fetch(url)
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        var products = (data && data.products) || [];
-
-        products.forEach(function(p) {
-          // Skip if Liquid already rendered this product
-          if (gridRoot.querySelector('[data-byob-product-id="' + p.id + '"]')) return;
-          var card = buildCard(p);
-          if (!card) return;
-          // Skip sold-out products
-          if (card.hasAttribute('data-byob-soldout')) return;
-          gridRoot.appendChild(card);
-        });
-
-        // If API returned a full page, there may be more — advance page counter
-        if (products.length === API_PAGE_SIZE) {
-          currentApiPage++;
-        } else {
-          allLoaded = true;
-          if (observer) observer.disconnect();
-        }
-        if (loaderWrap) loaderWrap.style.display = 'none';
-
-        // Re-sync card states (disabled/selected) with current bundle
-        renderBundleUI();
-        isFetching = false;
-      })
-      .catch(function(err) {
-        console.warn('BYOB: product fetch failed (page ' + currentApiPage + ')', err);
-        if (loaderWrap) loaderWrap.style.display = 'none';
-        isFetching = false;
-      });
-  }
-
-  // IntersectionObserver fires fetchNextPage when the sentinel scrolls into view
-  var observer = null;
-  if (totalProducts > 50 && collectionHandle && 'IntersectionObserver' in window) {
-    observer = new IntersectionObserver(function(entries) {
-      if (entries[0].isIntersecting) fetchNextPage();
-    }, { rootMargin: '400px' }); // start loading 400px before sentinel is visible
-    if (sentinel) observer.observe(sentinel);
-  }
-
   renderBundleUI();
-  // Kick off the first fetch immediately so products appear even without scrolling
-  if (totalProducts > 50) fetchNextPage();
+ }
+ gridRoot.addEventListener('click', function (e) {
+  var card = e.target.closest('[data-byob-product]');
+  if (!card) return;
+  var btn = e.target.closest('[data-byob-add-btn]');
+  if (btn) {
+   if (btn.disabled) return;
+   if (card.classList.contains('byob-card-disabled') || card.hasAttribute('data-byob-soldout')) return;
+   toggleProduct(card);
+   return;
+  }
+  openProductModal(card);
+ });
+ gridRoot.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (e.target.closest('[data-byob-add-btn]')) return;
+  var card = e.target.closest('[data-byob-product]');
+  if (!card) return;
+  e.preventDefault();
+  openProductModal(card);
+ });
+ var modalRoot          = document.getElementById('byob-modal-' + sectionId);
+ var modalTitle         = modalRoot && modalRoot.querySelector('[data-byob-modal-title]');
+ var modalPrice         = modalRoot && modalRoot.querySelector('[data-byob-modal-price]');
+ var modalComparePrice  = modalRoot && modalRoot.querySelector('[data-byob-modal-compare-price]');
+ var modalDiscountBadge = modalRoot && modalRoot.querySelector('[data-byob-modal-discount-badge]');
+ var modalDesc          = modalRoot && modalRoot.querySelector('[data-byob-modal-desc]');
+ var modalReadMore      = modalRoot && modalRoot.querySelector('[data-byob-modal-readmore]');
+ var modalAddBtn        = modalRoot && modalRoot.querySelector('[data-byob-modal-add-btn]');
+ var modalCloseBtn      = modalRoot && modalRoot.querySelector('[data-byob-modal-close]');
+ var modalReviewsLink   = modalRoot && modalRoot.querySelector('[data-byob-reviews-link]');
+ var modalAreviewsWrap  = modalRoot && modalRoot.querySelector('[data-byob-areviews-wrap]');
+ var modalReviewsCard   = modalRoot && modalRoot.querySelector('[data-byob-reviews-card]');
+ var modalReviewsTrack  = modalRoot && modalRoot.querySelector('[data-byob-reviews-track]');
+ var modalReviewsPrev   = modalRoot && modalRoot.querySelector('[data-byob-reviews-prev]');
+ var modalReviewsNext   = modalRoot && modalRoot.querySelector('[data-byob-reviews-next]');
+ var modalReviewsSeeAll = modalRoot && modalRoot.querySelector('[data-byob-reviews-seeall]');
+
+ var reviewsSlides      = [];
+ var reviewsIndex       = 0;
+ var modalCarouselTrack = modalRoot && modalRoot.querySelector('[data-byob-carousel-track]');
+ var modalThumbs        = modalRoot && modalRoot.querySelector('[data-byob-thumbs]');
+ var modalCarouselPrev  = modalRoot && modalRoot.querySelector('[data-byob-carousel-prev]');
+ var modalCarouselNext  = modalRoot && modalRoot.querySelector('[data-byob-carousel-next]');
+ var modalItemCountText = modalRoot && modalRoot.querySelector('[data-byob-modal-item-count]');
+ var modalTrackFill     = modalRoot && modalRoot.querySelector('[data-byob-modal-track-fill]');
+ var modalMessage       = modalRoot && modalRoot.querySelector('[data-byob-modal-message]');
+ var modalNodes         = modalRoot ? modalRoot.querySelectorAll('[data-byob-modal-node]') : [];
+ var modalQtyMinus      = modalRoot && modalRoot.querySelector('[data-byob-qty-minus]');
+ var modalQtyPlus       = modalRoot && modalRoot.querySelector('[data-byob-qty-plus]');
+ var modalQtyValue      = modalRoot && modalRoot.querySelector('[data-byob-qty-value]');
+ var modalQty           = 1;
+ var modalRecs          = modalRoot && modalRoot.querySelector('[data-byob-modal-recs]');
+ var modalRecsTrack     = modalRoot && modalRoot.querySelector('[data-byob-modal-recs-track]');
+ var modalCurrentCard   = null;
+ var modalFullDesc      = '';   // raw description HTML for the open card
+ var modalDescExpanded  = false;
+ var carouselScrollTimer = null;
+ function renderModalDesc() {
+  if (!modalDesc) return;
+  modalDesc.innerHTML = (modalFullDesc && modalFullDesc.trim())
+   ? modalFullDesc
+   : 'No description available for this product.';
+  modalDescExpanded = false;
+  modalDesc.classList.add('is-clamped');
+  if (modalReadMore) modalReadMore.hidden = true;
+  var overflowing = modalDesc.scrollHeight > modalDesc.clientHeight + 2;
+  if (overflowing) {
+   if (modalReadMore) { modalReadMore.hidden = false; modalReadMore.textContent = 'Read more'; }
+  } else {
+   modalDesc.classList.remove('is-clamped');
+  }
+ }
+ if (modalReadMore) {
+  modalReadMore.addEventListener('click', function () {
+   modalDescExpanded = !modalDescExpanded;
+   modalDesc.classList.toggle('is-clamped', !modalDescExpanded);
+   modalReadMore.textContent = modalDescExpanded ? 'Read less' : 'Read more';
+  });
+ }
+ function currentSlideIndex() {
+  if (!modalCarouselTrack || !modalCarouselTrack.clientWidth) return 0;
+  return Math.round(modalCarouselTrack.scrollLeft / modalCarouselTrack.clientWidth);
+ }
+ function goToSlide(index) {
+  if (!modalCarouselTrack) return;
+  modalCarouselTrack.scrollTo({ left: index * modalCarouselTrack.clientWidth, behavior: 'smooth' });
+ }
+ function updateActiveThumb() {
+  if (!modalThumbs) return;
+  var index = currentSlideIndex();
+  var thumbs = modalThumbs.querySelectorAll('.byob-modal-thumb');
+  thumbs.forEach(function (t, i) { t.classList.toggle('is-active', i === index); });
+ }
+ function buildCarousel(images, titleText) {
+  if (!modalCarouselTrack) return;
+  var list = (images && images.length) ? images : [];
+  modalCarouselTrack.innerHTML = '';
+  if (modalThumbs) modalThumbs.innerHTML = '';
+  list.forEach(function (src, i) {
+   var slide = document.createElement('div');
+   slide.className = 'byob-modal-carousel-slide';
+   if (src) {
+    var img = document.createElement('img');
+    img.src = src;
+    img.alt = titleText || '';
+    img.loading = 'lazy';
+    slide.appendChild(img);
+   }
+   modalCarouselTrack.appendChild(slide);
+   if (list.length > 1 && modalThumbs && src) {
+    var thumb = document.createElement('button');
+    thumb.type = 'button';
+    thumb.className = 'byob-modal-thumb' + (i === 0 ? ' is-active' : '');
+    thumb.setAttribute('aria-label', 'Show image ' + (i + 1));
+    var thumbImg = document.createElement('img');
+    thumbImg.src = src;
+    thumbImg.alt = '';
+    thumbImg.loading = 'lazy';
+    thumb.appendChild(thumbImg);
+    thumb.addEventListener('click', function () { goToSlide(i); });
+    modalThumbs.appendChild(thumb);
+   }
+  });
+  var multi = list.length > 1;
+  if (modalCarouselPrev) modalCarouselPrev.hidden = !multi;
+  if (modalCarouselNext) modalCarouselNext.hidden = !multi;
+  if (modalThumbs) modalThumbs.hidden = !multi;
+  modalCarouselTrack.scrollLeft = 0;
+ }
+ if (modalCarouselPrev) {
+  modalCarouselPrev.addEventListener('click', function () {
+   goToSlide(Math.max(0, currentSlideIndex() - 1));
+  });
+ }
+ if (modalCarouselNext) {
+  modalCarouselNext.addEventListener('click', function () {
+   var total = modalCarouselTrack ? modalCarouselTrack.querySelectorAll('.byob-modal-carousel-slide').length : 0;
+   goToSlide(Math.min(total - 1, currentSlideIndex() + 1));
+  });
+ }
+ if (modalCarouselTrack) {
+  modalCarouselTrack.addEventListener('scroll', function () {
+   clearTimeout(carouselScrollTimer);
+   carouselScrollTimer = setTimeout(updateActiveThumb, 80);
+  });
+ }
+ function renderModalBundleSection(state) {
+  if (!modalRoot) return;
+  state = state || computeBundleState();
+  if (modalItemCountText) modalItemCountText.textContent = state.itemCount;
+  if (modalTrackFill) modalTrackFill.style.width = state.fillPct + '%';
+  modalNodes.forEach(function (node) {
+   var nodeIndex = parseInt(node.getAttribute('data-byob-modal-node'), 10);
+   node.classList.remove('byob-active', 'byob-current', 'byob-maxed');
+   if (nodeIndex <= Math.min(state.itemCount, BYOB_MILESTONE_COUNT) && state.itemCount > 0) {
+    node.classList.add('byob-active');
+    if (state.isMaxDiscountReached && nodeIndex === BYOB_MILESTONE_COUNT) {
+     node.classList.add('byob-maxed');
+    }
+   }
+   if (nodeIndex === state.itemCount && state.itemCount > 0 && !state.isMaxDiscountReached) {
+    node.classList.add('byob-current');
+   }
+  });
+  if (modalMessage) {
+   modalMessage.classList.toggle('byob-message-maxed', state.messageIsMaxed);
+   modalMessage.innerHTML = state.messageHTML;
+  }
+ }
+ function renderModalQty() {
+  if (modalQtyValue) modalQtyValue.textContent = modalQty;
+  if (modalQtyMinus) modalQtyMinus.disabled = modalQty <= 1;
+ }
+ function applyModalQty() {
+  var pid = modalCurrentCard && modalCurrentCard.getAttribute('data-byob-product-id');
+  if (pid && bundleItems.hasOwnProperty(pid)) {
+   bundleItems[pid].qty = modalQty;
+   renderBundleUI();
+  }
+ }
+ if (modalQtyMinus) {
+  modalQtyMinus.addEventListener('click', function () {
+   if (modalQty > 1) { modalQty--; renderModalQty(); applyModalQty(); }
+  });
+ }
+ if (modalQtyPlus) {
+  modalQtyPlus.addEventListener('click', function () {
+   if (modalQty < 99) { modalQty++; renderModalQty(); applyModalQty(); }
+  });
+ }
+ function renderModalPrice(card) {
+  var priceCents = parseInt(card.getAttribute('data-byob-price'), 10) || 0;
+  var compareRaw = card.getAttribute('data-byob-compare-price');
+  var compareCents = compareRaw ? parseInt(compareRaw, 10) : 0;
+  if (modalPrice) modalPrice.textContent = formatMoney(priceCents);
+  var onSale = compareCents > priceCents;
+  if (modalComparePrice) {
+   if (onSale) {
+    modalComparePrice.textContent = formatMoney(compareCents);
+    modalComparePrice.hidden = false;
+   } else {
+    modalComparePrice.hidden = true;
+   }
+  }
+  if (modalDiscountBadge) {
+   if (onSale) {
+    var pct = Math.round((1 - (priceCents / compareCents)) * 100);
+    modalDiscountBadge.textContent = pct + '% OFF';
+    modalDiscountBadge.hidden = false;
+   } else {
+    modalDiscountBadge.hidden = true;
+   }
+  }
+ }
+ function getRecommendationCandidates(excludeProductId, max) {
+  var allCards = Array.prototype.slice.call(gridRoot.querySelectorAll('[data-byob-product]'))
+   .filter(function (c) {
+    return c.getAttribute('data-byob-product-id') !== excludeProductId && !c.hasAttribute('data-byob-soldout');
+   });
+  var notInBundle = allCards.filter(function (c) { return !bundleItems.hasOwnProperty(c.getAttribute('data-byob-product-id')); });
+  var inBundle = allCards.filter(function (c) { return bundleItems.hasOwnProperty(c.getAttribute('data-byob-product-id')); });
+  return notInBundle.concat(inBundle).slice(0, max);
+ }
+ function buildRecommendationCard(sourceCard) {
+  var productId = sourceCard.getAttribute('data-byob-product-id');
+  var imgEl = sourceCard.querySelector('.byob-product-image img');
+  var titleText = sourceCard.getAttribute('data-byob-full-title') || '';
+  var priceCents = parseInt(sourceCard.getAttribute('data-byob-price'), 10) || 0;
+  var isSelected = sourceCard.classList.contains('byob-card-selected');
+  var wrap = document.createElement('div');
+  wrap.className = 'byob-modal-rec-card';
+  var imgWrap = document.createElement('div');
+  imgWrap.className = 'byob-modal-rec-image';
+  if (imgEl) {
+   var img = document.createElement('img');
+   img.src = imgEl.src;
+   img.alt = titleText;
+   img.loading = 'lazy';
+   imgWrap.appendChild(img);
+  }
+  wrap.appendChild(imgWrap);
+  var title = document.createElement('div');
+  title.className = 'byob-modal-rec-title';
+  title.textContent = titleText;
+  wrap.appendChild(title);
+  var price = document.createElement('div');
+  price.className = 'byob-modal-rec-price';
+  price.textContent = formatMoney(priceCents);
+  wrap.appendChild(price);
+  var addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'byob-modal-rec-add' + (isSelected ? ' is-added' : '');
+  addBtn.textContent = isSelected ? '✓ Added' : '+ Add';
+  addBtn.setAttribute('data-byob-rec-product-id', productId);
+  addBtn.addEventListener('click', function () {
+   toggleProduct(sourceCard);
+  });
+  wrap.appendChild(addBtn);
+  return wrap;
+ }
+ function populateRecommendations() {
+  if (!modalRecs || !modalRecsTrack || !modalCurrentCard) return;
+  var excludeId = modalCurrentCard.getAttribute('data-byob-product-id');
+  var candidates = getRecommendationCandidates(excludeId, 6);
+  modalRecsTrack.innerHTML = '';
+  if (!candidates.length) { modalRecs.hidden = true; return; }
+  candidates.forEach(function (card) {
+   modalRecsTrack.appendChild(buildRecommendationCard(card));
+  });
+  modalRecs.hidden = false;
+ }
+ function syncRecommendations() {
+  if (!modalRecs || modalRecs.hidden || !modalRecsTrack) return;
+  var buttons = modalRecsTrack.querySelectorAll('[data-byob-rec-product-id]');
+  buttons.forEach(function (btn) {
+   var pid = btn.getAttribute('data-byob-rec-product-id');
+   var isSelected = bundleItems.hasOwnProperty(pid);
+   btn.classList.toggle('is-added', isSelected);
+   btn.textContent = isSelected ? '✓ Added' : '+ Add';
+  });
+ }
+ function syncModalButton() {
+  if (!modalAddBtn || !modalCurrentCard) return;
+  var soldOut = modalCurrentCard.hasAttribute('data-byob-soldout');
+  var isSelected = modalCurrentCard.classList.contains('byob-card-selected');
+  modalAddBtn.classList.toggle('is-added', isSelected && !soldOut);
+  if (soldOut) {
+   modalAddBtn.textContent = 'Sold Out';
+   modalAddBtn.disabled = true;
+  } else if (isSelected) {
+   var pid = modalCurrentCard.getAttribute('data-byob-product-id');
+   var addedQty = (bundleItems[pid] && bundleItems[pid].qty) || 1;
+   modalAddBtn.textContent = addedQty > 1 ? '✓ Added (×' + addedQty + ')' : '✓ Added';
+   modalAddBtn.disabled = false;
+  } else {
+   modalAddBtn.textContent = '+ Add to Bundle';
+   modalAddBtn.disabled = false;
+  }
+ }
+ function watchForAsyncContent(sourceEl, forCard, onReady) {
+  if (!sourceEl || !('MutationObserver' in window)) return;
+  var obs = new MutationObserver(function () {
+   if (modalCurrentCard !== forCard) { obs.disconnect(); return; }
+   if (sourceEl.innerHTML.trim()) { onReady(); obs.disconnect(); }
+  });
+  obs.observe(sourceEl, { childList: true, subtree: true });
+  setTimeout(function () { obs.disconnect(); }, 5000);
+ }
+ function stripInlineStyles(el) {
+  el.removeAttribute('style');
+  el.querySelectorAll('[style]').forEach(function (c) { c.removeAttribute('style'); });
+ }
+ function updateReviewsCarousel() {
+  reviewsSlides.forEach(function (slide, i) { slide.classList.toggle('is-active', i === reviewsIndex); });
+  var multi = reviewsSlides.length > 1;
+  if (modalReviewsPrev) modalReviewsPrev.hidden = !multi;
+  if (modalReviewsNext) modalReviewsNext.hidden = !multi;
+ }
+ if (modalReviewsPrev) {
+  modalReviewsPrev.addEventListener('click', function () {
+   reviewsIndex = (reviewsIndex - 1 + reviewsSlides.length) % reviewsSlides.length;
+   updateReviewsCarousel();
+  });
+ }
+ if (modalReviewsNext) {
+  modalReviewsNext.addEventListener('click', function () {
+   reviewsIndex = (reviewsIndex + 1) % reviewsSlides.length;
+   updateReviewsCarousel();
+  });
+ }
+ function renderReviewSlides(htmlList) {
+  if (!modalReviewsCard || !modalReviewsTrack) return;
+  modalReviewsTrack.innerHTML = '';
+  reviewsSlides = [];
+  reviewsIndex = 0;
+  if (!htmlList || !htmlList.length) { modalReviewsCard.hidden = true; return; }
+  var temp = document.createElement('div');
+  htmlList.forEach(function (htmlStr) {
+   temp.innerHTML = htmlStr;
+   var node = temp.firstElementChild;
+   if (!node) return;
+   stripInlineStyles(node);
+   node.className = 'byob-modal-review-slide';
+   modalReviewsTrack.appendChild(node);
+   reviewsSlides.push(node);
+  });
+  updateReviewsCarousel();
+  modalReviewsCard.hidden = reviewsSlides.length === 0;
+ }
+ var reviewsCache = {};
+ function fetchAndRenderReviews(productId, forCard) {
+  if (!modalReviewsCard || !modalReviewsTrack || !productId) return;
+  if (reviewsCache.hasOwnProperty(productId)) { renderReviewSlides(reviewsCache[productId]); return; }
+  modalReviewsCard.hidden = true; // stays hidden until (and unless) real reviews arrive
+  var params = new URLSearchParams({
+   product_id: productId,
+   customer_id: byobCustomerId,
+   customer_country: 'country=IN',
+   browser_lang: (navigator.language || 'en-US'),
+   areviews_device: (/Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop')
+  });
+  fetch('/apps/aliexpress_reviews', { method: 'POST', body: params })
+   .then(function (res) { return res.ok ? res.text() : ''; })
+   .then(function (html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var htmlList = [];
+    temp.querySelectorAll('.container_head').forEach(function (n) { htmlList.push(n.outerHTML); });
+    reviewsCache[productId] = htmlList;
+    if (modalCurrentCard === forCard) renderReviewSlides(htmlList);
+   })
+   .catch(function () {
+    reviewsCache[productId] = [];
+    if (modalCurrentCard === forCard) renderReviewSlides([]);
+   });
+ }
+ function openProductModal(card) {
+  if (!modalRoot) return;
+  modalCurrentCard = card;
+  modalRoot.classList.add('byob-modal-open');
+  modalRoot.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('byob-modal-locked');
+  var imgEl = card.querySelector('.byob-product-image img');
+  var largeSrc = card.getAttribute('data-byob-image-large');
+  var titleEl = card.querySelector('.byob-product-title');
+  var titleText = card.getAttribute('data-byob-full-title') || (titleEl ? titleEl.textContent : '');
+  modalFullDesc = card.getAttribute('data-byob-description') || '';
+  var images = [];
+  var imagesRaw = card.getAttribute('data-byob-images');
+  if (imagesRaw) {
+   try { images = JSON.parse(imagesRaw) || []; } catch (e) { images = []; }
+  }
+  if (!images.length) {
+   var fallbackSrc = largeSrc || (imgEl ? imgEl.src : '');
+   if (fallbackSrc) images = [fallbackSrc];
+  }
+  if (modalTitle) modalTitle.textContent = titleText;
+  renderModalPrice(card);
+  renderModalDesc();
+  buildCarousel(images, titleText);
+  var existingItem = bundleItems[card.getAttribute('data-byob-product-id')];
+  modalQty = (existingItem && existingItem.qty) || 1;
+  renderModalQty();
+  renderModalBundleSection();
+  populateRecommendations();
+  if (modalAreviewsWrap) {
+   var sourceRatingEl = card.querySelector('[data-byob-areviews-source]');
+   var ratingHtml = (sourceRatingEl && sourceRatingEl.innerHTML.trim()) ? sourceRatingEl.innerHTML : '';
+   modalAreviewsWrap.innerHTML = ratingHtml;
+   if (!ratingHtml && sourceRatingEl) {
+    watchForAsyncContent(sourceRatingEl, card, function () {
+     modalAreviewsWrap.innerHTML = sourceRatingEl.innerHTML;
+    });
+   }
+  }
+  fetchAndRenderReviews(card.getAttribute('data-byob-product-id'), card);
+  var productUrl = card.getAttribute('data-byob-product-url');
+  if (modalReviewsSeeAll) modalReviewsSeeAll.href = productUrl || '#';
+  if (modalReviewsLink) {
+   if (productUrl) {
+    modalReviewsLink.href = productUrl;
+    modalReviewsLink.style.display = '';
+   } else {
+    modalReviewsLink.style.display = 'none';
+   }
+  }
+  syncModalButton();
+ }
+ function closeProductModal() {
+  if (!modalRoot) return;
+  modalRoot.classList.remove('byob-modal-open');
+  modalRoot.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('byob-modal-locked');
+  modalCurrentCard = null;
+ }
+ if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeProductModal);
+ if (modalRoot) {
+  modalRoot.addEventListener('click', function (e) {
+   if (e.target === modalRoot) closeProductModal();
+  });
+ }
+ document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && modalRoot && modalRoot.classList.contains('byob-modal-open')) {
+   closeProductModal();
+  }
+ });
+ if (modalAddBtn) {
+  modalAddBtn.addEventListener('click', function () {
+   if (!modalCurrentCard || modalAddBtn.disabled) return;
+   toggleProduct(modalCurrentCard, modalQty);
+   syncModalButton();
+  });
+ }
+ function addBundleToCart() {
+  var items = [];
+  for (var id in bundleItems) {
+   if (bundleItems.hasOwnProperty(id)) {
+    items.push({
+     id: parseInt(bundleItems[id].variantId, 10),
+     quantity: bundleItems[id].qty || 1,
+     properties: { '_byob_bundle': 'true' }
+    });
+   }
+  }
+  if (items.length === 0) return;
+  bar.viewBundleBtn.disabled = true;
+  var originalLabel = bar.viewBundleBtn.innerHTML;
+  bar.viewBundleBtn.textContent = 'Adding…';
+  fetch(window.Shopify.routes.root + 'cart/add.js', {
+   method: 'POST',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({ items: items })
+  })
+   .then(function (res) {
+    if (!res.ok) return res.json().then(function (err) { throw new Error(err.description || 'Cart error'); });
+    return res.json();
+   })
+   .then(function () {
+    document.dispatchEvent(new CustomEvent('cart:updated'));
+    window.location.href = window.Shopify.routes.root + 'cart';
+   })
+   .catch(function (err) {
+    console.error('BYOB: failed to add bundle to cart', err);
+    alert('Could not add bundle to cart: ' + err.message);
+    bar.viewBundleBtn.disabled = false;
+    bar.viewBundleBtn.innerHTML = originalLabel;
+   });
+ }
+ if (bar.viewBundleBtn) bar.viewBundleBtn.addEventListener('click', addBundleToCart);
+ if (bar.continueBtn) {
+  bar.continueBtn.addEventListener('click', function () {
+   if (gridRoot) {
+    gridRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+   }
+  });
+ }
+ window['BYOB_' + sectionId] = {
+  addProduct: function (productId, variantId, priceCents, qty) {
+   var card = gridRoot.querySelector('[data-byob-product-id="' + productId + '"]');
+   if (card) { toggleProduct(card, qty); return; }
+   if (!bundleItems.hasOwnProperty(productId)) {
+    bundleItems[productId] = { variantId: variantId, priceCents: priceCents, qty: qty || 1 };
+    renderBundleUI();
+   }
+  },
+  removeProduct: function (productId) {
+   if (bundleItems.hasOwnProperty(productId)) {
+    delete bundleItems[productId];
+    renderBundleUI();
+   }
+  },
+  getState: function () { return barRoot.__byobLastState; }
+ };
+ var collectionHandle = gridRoot.getAttribute('data-byob-collection');
+ var totalProducts    = parseInt(gridRoot.getAttribute('data-byob-total'), 10) || 0;
+ var API_PAGE_SIZE    = 250;   // Shopify JSON API max per request
+ var currentApiPage   = 1;     // we start at page 1; the DOM-duplicate guard handles Liquid overlap
+ var allLoaded        = false;
+ var isFetching       = false;
+ var loaderWrap       = document.getElementById('byob-load-more-' + sectionId);
+ var sentinel         = document.getElementById('byob-sentinel-' + sectionId);
+ function parsePriceCents(priceStr) {
+  return Math.round(parseFloat(priceStr || '0') * 100);
+ }
+ function buildCard(product) {
+  var firstAvailableVariant = null;
+  if (product.variants && product.variants.length > 0) {
+   for (var i = 0; i < product.variants.length; i++) {
+    if (product.variants[i].available !== false) {
+     firstAvailableVariant = product.variants[i];
+     break;
+    }
+   }
+  }
+  var variant = firstAvailableVariant || (product.variants && product.variants[0]);
+  if (!variant) return null;
+  var priceCents = parsePriceCents(variant.price);
+  var comparePriceCents = 0;
+  if (variant.compare_at_price && parsePriceCents(variant.compare_at_price) > priceCents) {
+   comparePriceCents = parsePriceCents(variant.compare_at_price);
+  }
+  var available = (typeof product.available === 'boolean')
+   ? product.available
+   : (variant.available !== false);
+  var title = (product.title || '').slice(0, 60);
+  var imgSrc = '';
+  var rawSrc = '';
+  if (product.featured_image) {
+   rawSrc = (typeof product.featured_image === 'string')
+    ? product.featured_image
+    : (product.featured_image.src || '');
+  } else if (product.images && product.images.length > 0) {
+   rawSrc = (typeof product.images[0] === 'string')
+    ? product.images[0]
+    : (product.images[0].src || '');
+  }
+  if (rawSrc) {
+   imgSrc = rawSrc
+    .replace(/\.jpg(\?.*)?$/, '_300x300.jpg$1')
+    .replace(/\.jpeg(\?.*)?$/, '_300x300.jpeg$1')
+    .replace(/\.png(\?.*)?$/, '_300x300.png$1')
+    .replace(/\.webp(\?.*)?$/, '_300x300.webp$1');
+   if (imgSrc.startsWith('//')) imgSrc = 'https:' + imgSrc;
+  }
+  function toSizedUrl(src, size) {
+   if (!src) return '';
+   var sized = src
+    .replace(/\.jpg(\?.*)?$/, '_' + size + 'x' + size + '.jpg$1')
+    .replace(/\.jpeg(\?.*)?$/, '_' + size + 'x' + size + '.jpeg$1')
+    .replace(/\.png(\?.*)?$/, '_' + size + 'x' + size + '.png$1')
+    .replace(/\.webp(\?.*)?$/, '_' + size + 'x' + size + '.webp$1');
+   return sized.startsWith('//') ? 'https:' + sized : sized;
+  }
+  var imgSrcLarge = rawSrc ? toSizedUrl(rawSrc, 800) : '';
+  var galleryUrls = [];
+  if (product.images && product.images.length) {
+   galleryUrls = product.images.map(function (im) {
+    var s = (typeof im === 'string') ? im : (im.src || '');
+    return toSizedUrl(s, 800);
+   }).filter(function (s) { return !!s; });
+  }
+  if (!galleryUrls.length && imgSrcLarge) galleryUrls = [imgSrcLarge];
+  var productUrl = product.handle
+   ? (window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/') + 'products/' + product.handle
+   : '';
+  var card = document.createElement('div');
+  card.className = 'byob-product-card' + (available ? '' : ' byob-card-soldout');
+  card.setAttribute('data-byob-product', '');
+  card.setAttribute('data-byob-product-id', String(product.id));
+  card.setAttribute('data-byob-variant-id', String(variant.id));
+  card.setAttribute('data-byob-price', String(priceCents));
+  if (comparePriceCents > 0) card.setAttribute('data-byob-compare-price', String(comparePriceCents));
+  card.setAttribute('data-byob-full-title', product.title || '');
+  card.setAttribute('data-byob-description', product.body_html || '');
+  card.setAttribute('data-byob-image-large', imgSrcLarge);
+  card.setAttribute('data-byob-images', JSON.stringify(galleryUrls));
+  if (productUrl) card.setAttribute('data-byob-product-url', productUrl);
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-haspopup', 'dialog');
+  if (!available) card.setAttribute('data-byob-soldout', 'true');
+  var imgHtml = imgSrc
+   ? '<img src="' + imgSrc + '" alt="' + title.replace(/"/g, '&quot;') + '" loading="lazy" width="300" height="300">'
+   : '';
+  card.innerHTML =
+   '<div class="byob-selected-check">✓</div>' +
+   '<div class="byob-product-image">' + imgHtml + '</div>' +
+   '<div class="byob-product-title">' + title + '</div>' +
+   '<div class="byob-product-price">' + formatMoney(priceCents) + '</div>' +
+   '<div class="byob-areviews-source areviews_product_item areviews_stars' + product.id + '" data-product-id="' + product.id + '" data-byob-areviews-source aria-hidden="true"></div>' +
+   '<button type="button" class="byob-add-btn" data-byob-add-btn' + (available ? '' : ' disabled') + '>' +
+    (available ? '+ Add to Bundle' : 'Sold Out') +
+   '</button>';
+  return card;
+ }
+ function fetchNextPage() {
+  if (isFetching || allLoaded || !collectionHandle) return;
+  isFetching = true;
+  if (loaderWrap) loaderWrap.style.display = 'flex';
+  var url = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/') +
+       'collections/' + collectionHandle +
+       '/products.json?limit=' + API_PAGE_SIZE + '&page=' + currentApiPage;
+  fetch(url)
+   .then(function(res) { return res.json(); })
+   .then(function(data) {
+    var products = (data && data.products) || [];
+    products.forEach(function(p) {
+     if (gridRoot.querySelector('[data-byob-product-id="' + p.id + '"]')) return;
+     var card = buildCard(p);
+     if (!card) return;
+     if (card.hasAttribute('data-byob-soldout')) return;
+     gridRoot.appendChild(card);
+    });
+    if (products.length === API_PAGE_SIZE) {
+     currentApiPage++;
+    } else {
+     allLoaded = true;
+     if (observer) observer.disconnect();
+    }
+    if (loaderWrap) loaderWrap.style.display = 'none';
+    renderBundleUI();
+    isFetching = false;
+   })
+   .catch(function(err) {
+    console.warn('BYOB: product fetch failed (page ' + currentApiPage + ')', err);
+    if (loaderWrap) loaderWrap.style.display = 'none';
+    isFetching = false;
+   });
+ }
+ var observer = null;
+ if (totalProducts > 50 && collectionHandle && 'IntersectionObserver' in window) {
+  observer = new IntersectionObserver(function(entries) {
+   if (entries[0].isIntersecting) fetchNextPage();
+  }, { rootMargin: '400px' }); // start loading 400px before sentinel is visible
+  if (sentinel) observer.observe(sentinel);
+ }
+ renderBundleUI();
+ if (totalProducts > 50) fetchNextPage();
 })();
 </script>
-
 {% schema %}
-{
-  "name": "Build Your Own Bundle",
-  "target": "section",
-  "settings": [
-    {
-      "type": "header",
-      "content": "Content"
-    },
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Build Your Own Bundle"
-    },
-    {
-      "type": "textarea",
-      "id": "subheading",
-      "label": "Subheading",
-      "default": "Select up to 6 products to add to your bundle. Products aren't added to your cart until you view your bundle."
-    },
-    {
-      "type": "collection",
-      "id": "collection",
-      "label": "Collection to pull bundle-eligible products from"
-    },
-    {
-      "type": "range",
-      "id": "container_width",
-      "label": "Max grid width (px)",
-      "min": 800,
-      "max": 1600,
-      "step": 50,
-      "default": 1100
-    },
-    {
-      "type": "header",
-      "content": "Bundle rules"
-    },
-    {
-      "type": "range",
-      "id": "max_items",
-      "label": "Maximum items in bundle",
-      "min": 2,
-      "max": 6,
-      "step": 1,
-      "default": 6,
-      "info": "Hard cap — each milestone adds more discount up to 15% at 6 items."
-    },
-    {
-      "type": "range",
-      "id": "tier_2_pct",
-      "label": "Discount at 2 items (%)",
-      "min": 0,
-      "max": 50,
-      "step": 1,
-      "default": 5
-    },
-    {
-      "type": "range",
-      "id": "tier_3_pct",
-      "label": "Discount at 3 items (%)",
-      "min": 0,
-      "max": 50,
-      "step": 1,
-      "default": 8
-    },
-    {
-      "type": "range",
-      "id": "tier_4_pct",
-      "label": "Discount at 4 items (%)",
-      "min": 0,
-      "max": 50,
-      "step": 1,
-      "default": 10
-    },
-    {
-      "type": "range",
-      "id": "tier_5_pct",
-      "label": "Discount at 5 items (%)",
-      "min": 0,
-      "max": 50,
-      "step": 1,
-      "default": 12
-    },
-    {
-      "type": "range",
-      "id": "tier_6_pct",
-      "label": "Discount at 6 items (%)",
-      "min": 0,
-      "max": 50,
-      "step": 1,
-      "default": 15
-    },
-    {
-      "type": "header",
-      "content": "Appearance"
-    },
-    {
-      "type": "color",
-      "id": "bg_color",
-      "label": "Background color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "color",
-      "id": "accent_color",
-      "label": "Accent color (nodes, badges, buttons)",
-      "default": "#1B5E20"
-    },
-    {
-      "type": "color",
-      "id": "accent_color_light",
-      "label": "Accent color — light (backgrounds)",
-      "default": "#E8F5E9"
-    }
-  ]
-}
+{"name":"Build Your Own Bundle","target":"section","settings":[{"type":"header","content":"Content"},{"type":"text","id":"heading","label":"Heading","default":"Build Your Own Bundle"},{"type":"textarea","id":"subheading","label":"Subheading","default":"Select up to 6 products to add to your bundle. Products aren't added to your cart until you view your bundle."},{"type":"collection","id":"collection","label":"Collection to pull bundle-eligible products from"},{"type":"range","id":"container_width","label":"Max grid width (px)","min":800,"max":1600,"step":50,"default":1100},{"type":"header","content":"Bundle rules"},{"type":"range","id":"max_items","label":"Maximum items in bundle","min":2,"max":6,"step":1,"default":6,"info":"Hard cap \u2014 each milestone adds more discount up to 15% at 6 items."},{"type":"range","id":"tier_2_pct","label":"Discount at 2 items (%)","min":0,"max":50,"step":1,"default":5},{"type":"range","id":"tier_3_pct","label":"Discount at 3 items (%)","min":0,"max":50,"step":1,"default":8},{"type":"range","id":"tier_4_pct","label":"Discount at 4 items (%)","min":0,"max":50,"step":1,"default":10},{"type":"range","id":"tier_5_pct","label":"Discount at 5 items (%)","min":0,"max":50,"step":1,"default":12},{"type":"range","id":"tier_6_pct","label":"Discount at 6 items (%)","min":0,"max":50,"step":1,"default":15},{"type":"header","content":"Appearance"},{"type":"color","id":"bg_color","label":"Background color","default":"#ffffff"},{"type":"color","id":"accent_color","label":"Accent color (nodes, badges, buttons)","default":"#1B5E20"},{"type":"color","id":"accent_color_light","label":"Accent color \u2014 light (backgrounds)","default":"#E8F5E9"}]}
 {% endschema %}
