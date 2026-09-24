@@ -2,7 +2,7 @@
 
 client_id = "8fc9ed28d745fd2c8b143d3ef1df56c6"
 name = "Combo-Bundles"
-application_url = "https://integrations.platinuminfo.tech/combo-bundles"
+application_url = "https://integrations.platinuminfo.tech/combo-bundles"              
 embedded = true
 
 [build]

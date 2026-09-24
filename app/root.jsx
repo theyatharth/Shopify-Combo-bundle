@@ -8,10 +8,11 @@ import {
 
 
 export default function App() {
- 
- return (
+
+  return (
     <html>
       <head>
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
@@ -19,9 +20,9 @@ export default function App() {
           rel="stylesheet"
           href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css" />
 
-{/* 2. THE FIX: Force load Polaris CSS directly from Unpkg CDN */}
+        {/* 2. THE FIX: Force load Polaris CSS directly from Unpkg CDN */}
         <link rel="stylesheet" href="https://unpkg.com/@shopify/polaris@12.0.0/build/esm/styles.css" />
-       
+
         <Meta />
         <Links />
       </head>
