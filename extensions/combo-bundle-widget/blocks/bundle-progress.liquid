@@ -99,8 +99,7 @@
  .byob-modal-review-slide .verified_user { display: none; }
  .byob-modal-areviews:empty { display: none; }
  .byob-modal-areviews:not(:empty) { margin-bottom: 6px; }
- .byob-modal-reviews-link { display: inline-flex; align-items: center; gap: 4px; width: fit-content; font-size: 12.5px; font-weight: 700; color: var(--byob-green); text-decoration: none; }
- .byob-modal-reviews-link:hover { text-decoration: underline; }
+ .byob-modal-areviews-avg { font-weight: 700; color: var(--byob-text); margin: 0 4px; font-size: 12.5px; }
   .byob-modal-body { flex: 1 1 49%; max-width: 49%; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; padding: 28px 26px 26px 20px; min-width: 0; }
  .byob-modal-title { font-size: 20px; font-weight: 700; line-height: 1.3; color: var(--byob-text); margin: 0 0 8px; padding-right: 30px; }
  .byob-modal-price-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 10px; margin: 6px 0 14px; }
@@ -197,9 +196,11 @@
   .byob-modal-carousel { border-radius: 10px; }
   .byob-modal-carousel-slide { aspect-ratio: 1 / 1; }
   .byob-modal-thumb { width: 50px; height: 50px; }
-  .byob-modal-body { padding: 4px 18px 22px; }
+  .byob-modal-body { padding: 4px 18px 90px; }
   .byob-modal-title { font-size: 18px; padding-right: 34px; }
   .byob-modal-price { font-size: 19px; }
+  .byob-modal-qty-label, .byob-modal-qty-note { display: none; }
+  .byob-modal-actions-row { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; background: #fff; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.12); margin-bottom: 0; }
  }
   #byob-bottom-bar-{{ block.id }} {
   position: fixed;
@@ -402,7 +403,6 @@
     <div class="byob-modal-body">
      <h3 class="byob-modal-title" id="byob-modal-title-{{ block.id }}" data-byob-modal-title></h3>
           <div class="byob-modal-areviews" data-byob-areviews-wrap></div>
-     <a class="byob-modal-reviews-link" data-byob-reviews-link href="#" target="_blank" rel="noopener">See customer reviews</a>
      <div class="byob-modal-price-row">
       <span class="byob-modal-price" data-byob-modal-price></span>
       <span class="byob-modal-compare-price" data-byob-modal-compare-price hidden></span>
@@ -500,9 +500,7 @@
          <div class="byob-modal-recs-sub">Popular picks to go with this product</div>
         </div>
        </div>
-       {% if byob_collection.url %}
-        <a class="byob-modal-recs-seemore" href="{{ byob_collection.url }}">See more →</a>
-       {% endif %}
+       <a class="byob-modal-recs-seemore" href="{{ request.path }}">See more &rarr;</a>
       </div>
       <div class="byob-modal-recs-track" data-byob-modal-recs-track></div>
      </div>
@@ -610,6 +608,21 @@
   mobileProgress:  barRoot.querySelector('[data-byob-mobile-progress]')
  };
  var bundleItems = {};
+ var BYOB_STORAGE_KEY = 'byob_bundle_' + sectionId;
+ function saveBundleState() {
+  try { sessionStorage.setItem(BYOB_STORAGE_KEY, JSON.stringify(bundleItems)); } catch (e) {}
+ }
+ function loadBundleState() {
+  try {
+   var raw = sessionStorage.getItem(BYOB_STORAGE_KEY);
+   if (raw) {
+    var parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') bundleItems = parsed;
+   }
+  } catch (e) {}
+ }
+ loadBundleState();
+
  function formatMoney(cents) {
   if (window.Shopify && typeof window.Shopify.formatMoney === 'function' && window.theme_money_format) {
    return window.Shopify.formatMoney(cents, window.theme_money_format);
@@ -765,6 +778,7 @@
   if (typeof syncModalButton === 'function') syncModalButton();
   if (typeof renderModalBundleSection === 'function') renderModalBundleSection(state);
   if (typeof syncRecommendations === 'function') syncRecommendations();
+  saveBundleState();
  }
  function toggleProduct(card, qty) {
   var productId = card.getAttribute('data-byob-product-id');
@@ -806,7 +820,6 @@
  var modalReadMore      = modalRoot && modalRoot.querySelector('[data-byob-modal-readmore]');
  var modalAddBtn        = modalRoot && modalRoot.querySelector('[data-byob-modal-add-btn]');
  var modalCloseBtn      = modalRoot && modalRoot.querySelector('[data-byob-modal-close]');
- var modalReviewsLink   = modalRoot && modalRoot.querySelector('[data-byob-reviews-link]');
  var modalAreviewsWrap  = modalRoot && modalRoot.querySelector('[data-byob-areviews-wrap]');
  var modalReviewsCard   = modalRoot && modalRoot.querySelector('[data-byob-reviews-card]');
  var modalReviewsTrack  = modalRoot && modalRoot.querySelector('[data-byob-reviews-track]');
@@ -1126,6 +1139,45 @@
   updateReviewsCarousel();
   modalReviewsCard.hidden = reviewsSlides.length === 0;
  }
+
+ // The star badge's own markup never includes the exact numeric average (only
+ // rounded stars + a count) — that number only exists in the underlying data
+ // this same endpoint returns in bulk/collection mode. Fetch it scoped to just
+ // this product and insert it into the already-rendered star markup.
+ var ratingAverageCache = {};
+ function applyRatingAverage(productId) {
+  var avg = ratingAverageCache[productId];
+  if (!avg || !modalAreviewsWrap) return;
+  var ratingWrap = modalAreviewsWrap.querySelector('.areviews_rating');
+  if (!ratingWrap || ratingWrap.querySelector('.byob-modal-areviews-avg')) return;
+  var countSpan = ratingWrap.querySelector('span');
+  var avgSpan = document.createElement('span');
+  avgSpan.className = 'byob-modal-areviews-avg';
+  avgSpan.textContent = avg;
+  if (countSpan) ratingWrap.insertBefore(avgSpan, countSpan);
+  else ratingWrap.appendChild(avgSpan);
+ }
+ function fetchRatingAverage(productId, forCard) {
+  if (!productId) return;
+  if (ratingAverageCache.hasOwnProperty(productId)) { applyRatingAverage(productId); return; }
+  var params = new URLSearchParams();
+  params.append('ids[]', productId);
+  params.append('collection_reviews', 'collection_reviews');
+  fetch('/apps/aliexpress_reviews', { method: 'POST', body: params })
+   .then(function (res) { return res.ok ? res.json() : null; })
+   .then(function (data) {
+    var avg = null;
+    if (data) {
+     for (var key in data) {
+      if (data[key] && String(data[key].product_id) === String(productId)) { avg = data[key].average; break; }
+     }
+    }
+    ratingAverageCache[productId] = avg;
+    if (modalCurrentCard === forCard) applyRatingAverage(productId);
+   })
+   .catch(function () { ratingAverageCache[productId] = null; });
+ }
+
  var reviewsCache = {};
  function fetchAndRenderReviews(productId, forCard) {
   if (!modalReviewsCard || !modalReviewsTrack || !productId) return;
@@ -1186,23 +1238,19 @@
    var sourceRatingEl = card.querySelector('[data-byob-areviews-source]');
    var ratingHtml = (sourceRatingEl && sourceRatingEl.innerHTML.trim()) ? sourceRatingEl.innerHTML : '';
    modalAreviewsWrap.innerHTML = ratingHtml;
+   var pidForAvg = card.getAttribute('data-byob-product-id');
+   if (ratingHtml) applyRatingAverage(pidForAvg);
    if (!ratingHtml && sourceRatingEl) {
     watchForAsyncContent(sourceRatingEl, card, function () {
      modalAreviewsWrap.innerHTML = sourceRatingEl.innerHTML;
+     applyRatingAverage(pidForAvg);
     });
    }
+   fetchRatingAverage(pidForAvg, card);
   }
   fetchAndRenderReviews(card.getAttribute('data-byob-product-id'), card);
   var productUrl = card.getAttribute('data-byob-product-url');
   if (modalReviewsSeeAll) modalReviewsSeeAll.href = productUrl || '#';
-  if (modalReviewsLink) {
-   if (productUrl) {
-    modalReviewsLink.href = productUrl;
-    modalReviewsLink.style.display = '';
-   } else {
-    modalReviewsLink.style.display = 'none';
-   }
-  }
   syncModalButton();
  }
  function closeProductModal() {
@@ -1256,6 +1304,11 @@
    })
    .then(function () {
     document.dispatchEvent(new CustomEvent('cart:updated'));
+    // Items are now in the real cart — the staging bundle should reset,
+    // otherwise the persisted state would bring these back as "still added"
+    // if the customer returns to this page.
+    bundleItems = {};
+    renderBundleUI();
     window.location.href = window.Shopify.routes.root + 'cart';
    })
    .catch(function (err) {

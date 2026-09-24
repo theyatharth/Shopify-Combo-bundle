@@ -52,6 +52,7 @@ export default defineConfig({
   },
   plugins: [
     remix({
+      basename: "/combo-bundles",
       ignoredRouteFiles: ["**/.*"],
       future: {
         v3_fetcherPersist: true,

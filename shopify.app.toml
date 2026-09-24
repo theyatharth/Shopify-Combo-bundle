@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "a15db3474337f1df79c6aee85570a88a"
-name = "combo-bundles"
-application_url = "https://shopify.platinuminfo.tech"
+client_id = "8fc9ed28d745fd2c8b143d3ef1df56c6"
+name = "Combo-Bundles"
+application_url = "https://integrations.platinuminfo.tech/combo-bundles"
 embedded = true
 
 [build]
@@ -19,15 +19,27 @@ api_version = "2026-07"
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_discounts,read_metaobject_definitions,read_metaobjects,read_products,write_discounts,write_metaobject_definitions,write_metaobjects,write_products"
+scopes = "read_discounts,write_discounts,read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects,read_products,write_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://shopify.platinuminfo.tech/auth/callback",
-  "https://shopify.platinuminfo.tech/auth/shopify/callback",
-  "https://shopify.platinuminfo.tech/api/auth/callback"
+  "https://integrations.platinuminfo.tech/combo-bundles/auth/callback",
+  "https://integrations.platinuminfo.tech/combo-bundles/auth/shopify/callback",
+  "https://integrations.platinuminfo.tech/combo-bundles/api/auth/callback"
 ]
