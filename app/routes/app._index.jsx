@@ -19,7 +19,7 @@ import { authenticate } from "../shopify.server";
 
 // 1. LOADER: Authenticates the page load
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   return json({ shop: session.shop });
 };
 
