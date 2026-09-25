@@ -38,6 +38,7 @@ if (host === "localhost") {
 }
 
 export default defineConfig({
+  base: "/combo-bundles/",
   server: {
     allowedHosts: [host],
     cors: {
