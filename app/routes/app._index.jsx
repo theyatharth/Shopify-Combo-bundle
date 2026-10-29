@@ -36,7 +36,7 @@ export default function Index() {
                 <List type="number">
                   <List.Item>Click the button below to open your theme editor.</List.Item>
                   <List.Item>Shopify will add the "Build Your Own Bundle" section automatically.</List.Item>
-                  <List.Item>Customize the collection, colors, and discount tiers in the section settings.</List.Item>
+                  <List.Item>Choose which collection to pull products from in the section settings.</List.Item>
                   <List.Item>Click <strong>Save</strong> in the theme editor to publish it live.</List.Item>
                 </List>
                 <InlineStack>

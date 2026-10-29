@@ -1,24 +1,63 @@
+{% comment %}
+  Discount tiers and brand colors come from the combo_bundles.settings shop
+  metafield -- the same single source of truth the app's Settings page
+  (Phase 2) and the cart-lines discount function (Phase 3) read and write.
+  This used to be its own set of block settings here, which could silently
+  drift from what checkout actually applied; now there's one place to edit
+  them. The literal defaults below only matter if that metafield hasn't
+  been created yet (e.g. a merchant hasn't opened Settings), and mirror
+  DEFAULT_SETTINGS in app/models/comboBundleSettings.server.js exactly.
+{% endcomment %}
 {% liquid
  assign byob_collection = collections[block.settings.collection]
  assign byob_max_items = block.settings.max_items | default: 6
- assign byob_tier_2 = block.settings.tier_2_pct
- assign byob_tier_3 = block.settings.tier_3_pct
- assign byob_tier_4 = block.settings.tier_4_pct
- assign byob_tier_5 = block.settings.tier_5_pct
- assign byob_tier_6 = block.settings.tier_6_pct
+ assign byob_settings = shop.metafields.combo_bundles.settings.value
+ assign byob_tier_2 = 5
+ assign byob_tier_3 = 8
+ assign byob_tier_4 = 10
+ assign byob_tier_5 = 12
+ assign byob_tier_6 = 15
+ assign byob_accent = '#1B5E20'
+ assign byob_accent_light = '#E8F5E9'
+ assign byob_bg = '#FFFFFF'
+ if byob_settings
+  for byob_tier in byob_settings.tiers
+   case byob_tier.min
+    when 2
+     assign byob_tier_2 = byob_tier.pct
+    when 3
+     assign byob_tier_3 = byob_tier.pct
+    when 4
+     assign byob_tier_4 = byob_tier.pct
+    when 5
+     assign byob_tier_5 = byob_tier.pct
+    when 6
+     assign byob_tier_6 = byob_tier.pct
+   endcase
+  endfor
+  if byob_settings.colors.accent
+   assign byob_accent = byob_settings.colors.accent
+  endif
+  if byob_settings.colors.accentLight
+   assign byob_accent_light = byob_settings.colors.accentLight
+  endif
+  if byob_settings.colors.background
+   assign byob_bg = byob_settings.colors.background
+  endif
+ endif
  assign byob_collection_handle = byob_collection.handle
  assign byob_product_count = byob_collection.products_count
 %}
 <style>
   #byob-block-{{ block.id }},
  #byob-bottom-bar-{{ block.id }} {
-  --byob-green: {{ block.settings.accent_color }};
-  --byob-green-light: {{ block.settings.accent_color_light }};
+  --byob-green: {{ byob_accent }};
+  --byob-green-light: {{ byob_accent_light }};
   --byob-grey: #D9DCE1;
   --byob-grey-dark: #94A3B8;
   --byob-text: #1E293B;
   --byob-subtext: #64748B;
-  --byob-white: {{ block.settings.bg_color }};
+  --byob-white: {{ byob_bg }};
   --byob-orange-bg: #FFF3E0;
   --byob-orange-text: #C2410C;
   --byob-card-border: #E2E8F0;
@@ -1491,5 +1530,5 @@
 })();
 </script>
 {% schema %}
-{"name":"Build Your Own Bundle","target":"section","settings":[{"type":"header","content":"Content"},{"type":"text","id":"heading","label":"Heading","default":"Build Your Own Bundle"},{"type":"textarea","id":"subheading","label":"Subheading","default":"Select up to 6 products to add to your bundle. Products aren't added to your cart until you view your bundle."},{"type":"collection","id":"collection","label":"Collection to pull bundle-eligible products from"},{"type":"range","id":"container_width","label":"Max grid width (px)","min":800,"max":1600,"step":50,"default":1100},{"type":"header","content":"Bundle rules"},{"type":"range","id":"max_items","label":"Maximum items in bundle","min":2,"max":6,"step":1,"default":6,"info":"Hard cap \u2014 each milestone adds more discount up to 15% at 6 items."},{"type":"range","id":"tier_2_pct","label":"Discount at 2 items (%)","min":0,"max":50,"step":1,"default":5},{"type":"range","id":"tier_3_pct","label":"Discount at 3 items (%)","min":0,"max":50,"step":1,"default":8},{"type":"range","id":"tier_4_pct","label":"Discount at 4 items (%)","min":0,"max":50,"step":1,"default":10},{"type":"range","id":"tier_5_pct","label":"Discount at 5 items (%)","min":0,"max":50,"step":1,"default":12},{"type":"range","id":"tier_6_pct","label":"Discount at 6 items (%)","min":0,"max":50,"step":1,"default":15},{"type":"header","content":"Appearance"},{"type":"color","id":"bg_color","label":"Background color","default":"#ffffff"},{"type":"color","id":"accent_color","label":"Accent color (nodes, badges, buttons)","default":"#1B5E20"},{"type":"color","id":"accent_color_light","label":"Accent color \u2014 light (backgrounds)","default":"#E8F5E9"}]}
+{"name":"Build Your Own Bundle","target":"section","settings":[{"type":"header","content":"Content"},{"type":"text","id":"heading","label":"Heading","default":"Build Your Own Bundle"},{"type":"textarea","id":"subheading","label":"Subheading","default":"Select up to 6 products to add to your bundle. Products aren't added to your cart until you view your bundle."},{"type":"collection","id":"collection","label":"Collection to pull bundle-eligible products from"},{"type":"range","id":"container_width","label":"Max grid width (px)","min":800,"max":1600,"step":50,"default":1100},{"type":"header","content":"Bundle rules"},{"type":"range","id":"max_items","label":"Maximum items in bundle","min":2,"max":6,"step":1,"default":6,"info":"Hard cap on how many products a customer can add. Discount tiers and colors are configured from the app's Settings page in Shopify admin, not here."}]}
 {% endschema %}
