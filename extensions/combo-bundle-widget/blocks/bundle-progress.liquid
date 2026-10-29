@@ -83,9 +83,9 @@
   .byob-areviews-source { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0.01; pointer-events: none; }
  .byob-add-btn { margin-top: 2px; width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid var(--byob-card-border); background: var(--byob-white); font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all 0.18s ease; color: var(--byob-text); }
  .byob-add-btn:hover { border-color: var(--byob-green); color: var(--byob-green); }
- .byob-product-card.byob-card-selected { border-color: var(--byob-green); border-width: 0.8px; background: #F1FBF2; box-shadow: 0 0 0 3px rgba(27, 94, 32, 0.12), 0 4px 12px rgba(27, 94, 32, 0.1); }
+ .byob-product-card.byob-card-selected { border-color: var(--byob-green); border-width: 0.8px; background: var(--byob-green-light); box-shadow: 0 0 0 3px color-mix(in srgb, var(--byob-green) 12%, transparent), 0 4px 12px color-mix(in srgb, var(--byob-green) 10%, transparent); }
  .byob-product-card.byob-card-selected .byob-add-btn { background: var(--byob-green); border-color: var(--byob-green); color: #fff; }
- .byob-selected-check { position: absolute; top: 8px; right: 8px; z-index: 5; width: 32px; height: 32px; border-radius: 50%; background: var(--byob-green); color: #fff; display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; box-shadow: 0 3px 8px rgba(27, 94, 32, 0.45); pointer-events: none; }
+ .byob-selected-check { position: absolute; top: 8px; right: 8px; z-index: 5; width: 32px; height: 32px; border-radius: 50%; background: var(--byob-green); color: #fff; display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; box-shadow: 0 3px 8px color-mix(in srgb, var(--byob-green) 45%, transparent); pointer-events: none; }
  .byob-product-card.byob-card-selected .byob-selected-check { display: flex; }
  .byob-product-card.byob-card-disabled { opacity: 0.5; pointer-events: none; }
  .byob-product-card.byob-card-disabled .byob-add-btn { background: #F1F5F9; color: var(--byob-grey-dark); border-color: var(--byob-card-border); cursor: not-allowed; }
@@ -158,7 +158,7 @@
  .byob-modal-readmore { display: inline-block; margin-top: 4px; padding: 0; border: none; background: none; color: var(--byob-green); font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
  .byob-modal-readmore:hover { opacity: 0.75; }
  .byob-modal-readmore[hidden] { display: none; }
-  .byob-modal-bundle-box { background: var(--byob-green-light); border: 1px solid rgba(27, 94, 32, 0.14); border-radius: 12px; padding: 16px 16px 14px; margin-bottom: 18px; }
+  .byob-modal-bundle-box { background: var(--byob-green-light); border: 1px solid color-mix(in srgb, var(--byob-green) 14%, transparent); border-radius: 12px; padding: 16px 16px 14px; margin-bottom: 18px; }
  .byob-modal-bundle-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
  .byob-modal-bundle-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; background: var(--byob-green); display: flex; align-items: center; justify-content: center; }
  .byob-modal-bundle-icon svg { width: 19px; height: 19px; }
@@ -171,7 +171,7 @@
  .byob-modal-ladder .byob-ladder-track-fill { height: 2px; }
  .byob-modal-ladder .byob-node.byob-current .byob-node-circle,
  .byob-modal-ladder .byob-node.byob-maxed .byob-node-circle { box-shadow: 0 0 0 3px var(--byob-green-light); transform: scale(1.1); }
- .byob-modal-bundle-box .byob-node-circle { background: #fff; border-color: rgba(27, 94, 32, 0.35); }
+ .byob-modal-bundle-box .byob-node-circle { background: #fff; border-color: color-mix(in srgb, var(--byob-green) 35%, transparent); }
   .byob-modal-actions-row { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
  .byob-modal-qty-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--byob-text); margin-bottom: 8px; }
  .byob-modal-qty-stepper { flex-shrink: 0; display: flex; align-items: center; border: 1px solid var(--byob-card-border); border-radius: 8px; overflow: hidden; width: fit-content; }
@@ -262,7 +262,7 @@
  }
  #byob-bottom-bar-{{ block.id }}.byob-hidden { transform: translateY(100%); }
  .byob-left { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
- .byob-bag-wrap { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--byob-green); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(27, 94, 32, 0.3); }
+ .byob-bag-wrap { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--byob-green); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px color-mix(in srgb, var(--byob-green) 30%, transparent); }
  .byob-bag-wrap svg, .byob-bag-icon { width: 20px; height: 20px; color: #fff; }  .byob-count-badge { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #fff; color: var(--byob-green); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--byob-green); box-sizing: border-box; transition: transform 0.2s ease; }
  .byob-count-badge.byob-bump { animation: byobBadgeBump-{{ block.id }} 0.35s ease; }
  @keyframes byobBadgeBump-{{ block.id }} {
@@ -300,9 +300,9 @@
   .byob-modal-bundle-box .byob-message, .byob-modal-bundle-box .byob-message.byob-message-maxed { margin-top: 12px; text-align: left; background: none; border: none; padding: 0; color: var(--byob-text); }
  .byob-modal-bundle-box .byob-message-highlight { color: var(--byob-text); text-decoration: underline; }
  .byob-cta-block { display: flex; flex-direction: column; align-items: center; gap: 5px; }
- .byob-view-bundle-btn { background: var(--byob-green); color: #fff; border: none; padding: 12px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap; transition: all 0.2s ease; box-shadow: 0 2px 10px rgba(27, 94, 32, 0.25); }
+ .byob-view-bundle-btn { background: var(--byob-green); color: #fff; border: none; padding: 12px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap; transition: all 0.2s ease; box-shadow: 0 2px 10px color-mix(in srgb, var(--byob-green) 25%, transparent); }
  .byob-view-bundle-btn:disabled { background: var(--byob-green-light); color: var(--byob-green); border: 1px solid var(--byob-green); cursor: not-allowed; transform: none; box-shadow: none; opacity: 0.85; }
- .byob-view-bundle-btn:not(:disabled):hover { filter: brightness(1.12); transform: translateY(-2px); box-shadow: 0 5px 18px rgba(27, 94, 32, 0.35); }
+ .byob-view-bundle-btn:not(:disabled):hover { filter: brightness(1.12); transform: translateY(-2px); box-shadow: 0 5px 18px color-mix(in srgb, var(--byob-green) 35%, transparent); }
  .byob-continue-shopping { font-size: 11px; font-weight: 700; color: var(--byob-green); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; background: none; border: none; padding: 0; transition: opacity 0.2s; }
  .byob-continue-shopping:hover { opacity: 0.75; }
   @media screen and (max-width: 768px) {
@@ -341,7 +341,7 @@
   .byob-ladder-track { top: 8px; left: 9px; right: 9px; }
  }
   .byob-load-more-wrap { display: none; flex-direction: column; align-items: center; gap: 10px; padding: 28px 0 16px; }
- .byob-spinner { width: 32px; height: 32px; border: 3px solid var(--byob-green-light, #E8F5E9); border-top-color: var(--byob-green, #1B5E20); border-radius: 50%; animation: byobSpin 0.7s linear infinite; }
+ .byob-spinner { width: 32px; height: 32px; border: 3px solid var(--byob-green-light); border-top-color: var(--byob-green); border-radius: 50%; animation: byobSpin 0.7s linear infinite; }
  @keyframes byobSpin { to { transform: rotate(360deg); } }
  .byob-load-more-text { font-size: 12px; font-weight: 600; color: var(--byob-subtext, #64748B); margin: 0; }
   .byob-scroll-sentinel { height: 1px; }
