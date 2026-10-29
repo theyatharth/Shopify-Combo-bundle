@@ -23,11 +23,17 @@ import {
 const DISCOUNT_TITLE = "Mix & Match Bundle Savings";
 const TIER_MINS = [2, 3, 4, 5, 6];
 
-// Looks up the ID of the discount function this app ships, so we can match
-// *any* existing automatic discount that runs it, regardless of what it's
-// titled (merchants and earlier versions of this app have created discounts
-// under different titles, e.g. "Combo bundle discount").
-async function getBundleFunctionId(admin) {
+// TEMPORARY: titles seen in the wild for discounts that should count as
+// "ours" even when the functionId match below fails (e.g. eco-fynd's
+// "Combo bundle discount"). Remove once COMBO-DEBUG logging confirms why
+// the functionId match alone isn't finding them.
+const FALLBACK_DISCOUNT_TITLES = new Set(["Combo bundle discount", DISCOUNT_TITLE]);
+
+// Looks up every Shopify Function this app ships, so we can match *any*
+// existing automatic discount that runs one of them, regardless of what
+// it's titled (merchants and earlier versions of this app have created
+// discounts under different titles, e.g. "Combo bundle discount").
+async function getBundleFunctions(admin) {
   const response = await admin.graphql(
     `#graphql
     query ComboBundleFunction {
@@ -36,26 +42,37 @@ async function getBundleFunctionId(admin) {
       }
     }`,
   );
-  const { data } = await response.json();
-  const bundleFunction = data?.shopifyFunctions?.nodes?.find(
-    (fn) => fn.title === "custom-bundle-discount",
+  const { data, errors } = await response.json();
+  if (errors) {
+    console.error("COMBO-DEBUG shopifyFunctions GraphQL errors", JSON.stringify(errors));
+  }
+  const nodes = data?.shopifyFunctions?.nodes ?? [];
+  console.log(
+    "COMBO-DEBUG shopifyFunctions nodes",
+    JSON.stringify(nodes.map((fn) => ({ id: fn.id, apiType: fn.apiType, title: fn.title }))),
   );
-  return bundleFunction?.id ?? null;
+  return nodes;
+}
+
+// Returns the ids of every shopifyFunctions node titled "custom-bundle-discount".
+// Normally there's exactly one, but this tolerates more than one (e.g. a
+// stale function version still returned alongside the current one).
+async function getBundleFunctionIds(admin) {
+  const nodes = await getBundleFunctions(admin);
+  return nodes.filter((fn) => fn.title === "custom-bundle-discount").map((fn) => fn.id);
 }
 
 // Looks up whether an automatic app discount running this app's function
 // already exists, so re-opening this page (or clicking Activate twice)
 // can't create duplicate discounts the way the old app.activate.jsx debug
-// page could. Matches by function, not title, since the discount may have
-// been created (by this app or by hand) under a title other than
-// DISCOUNT_TITLE.
-async function findExistingDiscount(admin, functionId) {
-  if (!functionId) return null;
-
+// page could. Matches by function id first; falls back to known titles
+// (see FALLBACK_DISCOUNT_TITLES) while we debug why eco-fynd's discount
+// isn't matching by function id alone.
+async function findExistingDiscount(admin, functionIds) {
   const response = await admin.graphql(
     `#graphql
     query FindComboBundleDiscount {
-      discountNodes(first: 50) {
+      discountNodes(first: 10, query: "type:app") {
         nodes {
           id
           discount {
@@ -63,33 +80,55 @@ async function findExistingDiscount(admin, functionId) {
             ... on DiscountAutomaticApp {
               title
               status
-              appDiscountType { functionId }
+              appDiscountType {
+                functionId
+                app { title }
+              }
             }
           }
         }
       }
     }`,
   );
-  const { data } = await response.json();
+  const { data, errors } = await response.json();
+  if (errors) {
+    console.error("COMBO-DEBUG discountNodes GraphQL errors", JSON.stringify(errors));
+  }
   const nodes = data?.discountNodes?.nodes ?? [];
-  const node = nodes.find(
-    (candidate) =>
-      candidate.discount?.__typename === "DiscountAutomaticApp" &&
-      candidate.discount.appDiscountType?.functionId === functionId,
+  console.log(
+    "COMBO-DEBUG discountNodes",
+    JSON.stringify(
+      nodes.map((candidate) => ({
+        id: candidate.id,
+        typename: candidate.discount?.__typename,
+        title: candidate.discount?.title,
+        status: candidate.discount?.status,
+        functionId: candidate.discount?.appDiscountType?.functionId,
+        appTitle: candidate.discount?.appDiscountType?.app?.title,
+      })),
+    ),
   );
+
+  const functionIdSet = new Set(functionIds ?? []);
+  const node = nodes.find((candidate) => {
+    const discount = candidate.discount;
+    if (discount?.__typename !== "DiscountAutomaticApp") return false;
+    if (functionIdSet.has(discount.appDiscountType?.functionId)) return true;
+    return FALLBACK_DISCOUNT_TITLES.has(discount.title);
+  });
   if (!node) return null;
   return { id: node.id, title: node.discount.title, status: node.discount.status };
 }
 
 async function activateComboBundleDiscount(admin) {
-  const bundleFunctionId = await getBundleFunctionId(admin);
-  if (!bundleFunctionId) {
+  const bundleFunctionIds = await getBundleFunctionIds(admin);
+  if (bundleFunctionIds.length === 0) {
     throw new Error(
       "Discount function not found. Run `npm run deploy` to deploy extensions first.",
     );
   }
 
-  const existing = await findExistingDiscount(admin, bundleFunctionId);
+  const existing = await findExistingDiscount(admin, bundleFunctionIds);
   if (existing) {
     return { alreadyActive: true, discount: existing };
   }
@@ -106,7 +145,7 @@ async function activateComboBundleDiscount(admin) {
       variables: {
         automaticAppDiscount: {
           title: DISCOUNT_TITLE,
-          functionId: bundleFunctionId,
+          functionId: bundleFunctionIds[0],
           startsAt: new Date().toISOString(),
           discountClasses: ["PRODUCT"],
         },
@@ -128,9 +167,9 @@ async function activateComboBundleDiscount(admin) {
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-  const [settings, bundleFunctionId] = await Promise.all([
+  const [settings, bundleFunctionIds] = await Promise.all([
     getComboBundleSettings(admin),
-    getBundleFunctionId(admin),
+    getBundleFunctionIds(admin),
     // Repairs storefront read access on the settings metafield definition
     // for shops that installed before it was added at creation time. Runs
     // alongside the other loader queries so it adds no serial latency, and
@@ -142,7 +181,7 @@ export const loader = async ({ request }) => {
       );
     }),
   ]);
-  const discount = await findExistingDiscount(admin, bundleFunctionId);
+  const discount = await findExistingDiscount(admin, bundleFunctionIds);
   return json({ settings, discount });
 };
 
