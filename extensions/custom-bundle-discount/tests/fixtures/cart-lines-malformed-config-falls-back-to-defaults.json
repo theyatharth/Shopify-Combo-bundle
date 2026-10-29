@@ -1,0 +1,97 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/1"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/2"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/3"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "quantity": 1,
+            "merchandise": {
+              "product": {
+                "id": "gid://shopify/Product/4"
+              }
+            }
+          }
+        ]
+      },
+      "shop": {
+        "metafield": {
+          "jsonValue": {
+            "tiers": "not-an-array",
+            "colors": {}
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "10% Off Bundle Savings",
+                "targets": [
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/0"
+                    }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/1"
+                    }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/2"
+                    }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/3"
+                    }
+                  }
+                ],
+                "value": {
+                  "percentage": {
+                    "value": "10"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "MAXIMUM"
+          }
+        }
+      ]
+    }
+  }
+}
