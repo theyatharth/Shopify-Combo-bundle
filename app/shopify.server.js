@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { ensureSettingsMetafieldDefinition } from "./models/comboBundleSettings.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -16,6 +17,15 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  hooks: {
+    // Runs after every OAuth completion (new installs and token refreshes
+    // alike), so the Combo Bundles settings metafield definition always
+    // exists before a merchant can reach the settings page or the discount
+    // function needs to read it.
+    afterAuth: async ({ admin }) => {
+      await ensureSettingsMetafieldDefinition(admin);
+    },
+  },
   future: {
     unstable_newEmbeddedAuthStrategy: true,
     expiringOfflineAccessTokens: true,
