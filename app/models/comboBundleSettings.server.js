@@ -81,6 +81,8 @@ export async function ensureSettingsMetafieldDefinition(admin) {
   }
 }
 
+const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 function isValidSettingsShape(value) {
   if (!value || typeof value !== "object") return false;
 
@@ -89,8 +91,8 @@ function isValidSettingsShape(value) {
   const tiersValid = tiers.every(
     (tier) =>
       tier &&
-      typeof tier.min === "number" &&
-      typeof tier.pct === "number" &&
+      Number.isFinite(tier.min) &&
+      Number.isFinite(tier.pct) &&
       tier.pct >= 0 &&
       tier.pct <= 100,
   );
@@ -98,9 +100,9 @@ function isValidSettingsShape(value) {
 
   return (
     !!colors &&
-    typeof colors.accent === "string" &&
-    typeof colors.accentLight === "string" &&
-    typeof colors.background === "string"
+    HEX_COLOR_PATTERN.test(colors.accent) &&
+    HEX_COLOR_PATTERN.test(colors.accentLight) &&
+    HEX_COLOR_PATTERN.test(colors.background)
   );
 }
 

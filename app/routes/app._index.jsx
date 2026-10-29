@@ -49,6 +49,19 @@ export default function Index() {
                 </InlineStack>
               </BlockStack>
             </Card>
+
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">Discount tiers & brand colors</Text>
+                <Text as="p">
+                  Set the percentage off at each bundle size and match the
+                  widget's colors to your brand from one place.
+                </Text>
+                <InlineStack>
+                  <Button url="/app/settings">Open settings</Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
           </BlockStack>
         </Layout.Section>
       </Layout>
