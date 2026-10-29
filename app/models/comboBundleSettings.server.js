@@ -42,13 +42,109 @@ const METAFIELD_DEFINITION = {
     "Discount tiers and brand colors for the Combo Bundles app. Edited from the app's Settings page; read by the bundle discount function and the storefront widget.",
   type: "json",
   ownerType: "SHOP",
+  // Liquid reads this metafield directly (bundle-progress.liquid), which
+  // requires Storefront API read access on the definition. Without it the
+  // widget silently falls back to its literal defaults even after a
+  // merchant saves custom tiers/colors from the app.
+  access: { storefront: "PUBLIC_READ" },
 };
+
+/**
+ * Looks up the definition's current access settings so we can skip the
+ * update mutation when storefront access is already correct (keeps the
+ * settings route loader fast on every normal page view).
+ */
+async function fetchSettingsMetafieldDefinition(admin) {
+  const response = await admin.graphql(
+    `#graphql
+    query ComboBundleSettingsDefinitionAccess($namespace: String!, $query: String!) {
+      metafieldDefinitions(first: 1, ownerType: SHOP, namespace: $namespace, query: $query) {
+        nodes {
+          id
+          access { storefront }
+        }
+      }
+    }`,
+    { variables: { namespace: SETTINGS_NAMESPACE, query: `key:${SETTINGS_KEY}` } },
+  );
+
+  const { data, errors } = await response.json();
+  if (errors) {
+    console.error(
+      "Combo Bundles: GraphQL error fetching settings metafield definition access",
+      errors,
+    );
+    return null;
+  }
+  return data?.metafieldDefinitions?.nodes?.[0] ?? null;
+}
+
+/**
+ * Repairs storefront access on a definition that already existed before
+ * `access` was added to METAFIELD_DEFINITION (metafieldDefinitionCreate
+ * only sets it once, at creation). Safe to call repeatedly and never
+ * throws — this backs both the OAuth hook and the settings page loader.
+ */
+async function ensureSettingsMetafieldStorefrontAccess(admin) {
+  try {
+    const definition = await fetchSettingsMetafieldDefinition(admin);
+    if (!definition || definition.access?.storefront === "PUBLIC_READ") {
+      return;
+    }
+
+    const response = await admin.graphql(
+      `#graphql
+      mutation UpdateComboBundleSettingsDefinitionAccess($definition: MetafieldDefinitionUpdateInput!) {
+        metafieldDefinitionUpdate(definition: $definition) {
+          updatedDefinition { id access { storefront } }
+          userErrors { code field message }
+        }
+      }`,
+      {
+        variables: {
+          definition: {
+            name: METAFIELD_DEFINITION.name,
+            namespace: SETTINGS_NAMESPACE,
+            key: SETTINGS_KEY,
+            ownerType: "SHOP",
+            access: { storefront: "PUBLIC_READ" },
+          },
+        },
+      },
+    );
+
+    const { data, errors } = await response.json();
+    if (errors) {
+      console.error(
+        "Combo Bundles: GraphQL error updating settings metafield storefront access",
+        errors,
+      );
+      return;
+    }
+
+    const userErrors = data?.metafieldDefinitionUpdate?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      console.error(
+        "Combo Bundles: failed to update settings metafield storefront access",
+        userErrors,
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Combo Bundles: unexpected error ensuring settings metafield storefront access",
+      error,
+    );
+  }
+}
 
 /**
  * Idempotently registers the shop-level metafield definition this app owns.
  * Safe to call on every OAuth completion (new installs and token refreshes
- * alike) — metafieldDefinitionCreate returns a TAKEN userError, not a thrown
- * error, when the definition already exists, which we treat as a no-op.
+ * alike) and from the settings page loader — metafieldDefinitionCreate
+ * returns a TAKEN userError, not a thrown error, when the definition
+ * already exists, in which case we separately repair its storefront access
+ * (needed for shops where the definition was created before `access` was
+ * added above).
  */
 export async function ensureSettingsMetafieldDefinition(admin) {
   const response = await admin.graphql(
@@ -78,6 +174,11 @@ export async function ensureSettingsMetafieldDefinition(admin) {
       "Combo Bundles: failed to create settings metafield definition",
       userErrors,
     );
+    return;
+  }
+
+  if (alreadyExists) {
+    await ensureSettingsMetafieldStorefrontAccess(admin);
   }
 }
 

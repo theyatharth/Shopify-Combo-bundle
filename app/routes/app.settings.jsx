@@ -15,6 +15,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import {
+  ensureSettingsMetafieldDefinition,
   getComboBundleSettings,
   saveComboBundleSettings,
 } from "../models/comboBundleSettings.server";
@@ -22,43 +23,12 @@ import {
 const DISCOUNT_TITLE = "Mix & Match Bundle Savings";
 const TIER_MINS = [2, 3, 4, 5, 6];
 
-// Looks up whether the automatic app discount this app manages already
-// exists, so re-opening this page (or clicking Activate twice) can't create
-// duplicate discounts the way the old app.activate.jsx debug page could.
-async function findExistingDiscount(admin) {
+// Looks up the ID of the discount function this app ships, so we can match
+// *any* existing automatic discount that runs it, regardless of what it's
+// titled (merchants and earlier versions of this app have created discounts
+// under different titles, e.g. "Combo bundle discount").
+async function getBundleFunctionId(admin) {
   const response = await admin.graphql(
-    `#graphql
-    query FindComboBundleDiscount($query: String!) {
-      discountNodes(first: 1, query: $query) {
-        nodes {
-          id
-          discount {
-            __typename
-            ... on DiscountAutomaticApp {
-              title
-              status
-            }
-          }
-        }
-      }
-    }`,
-    { variables: { query: `title:'${DISCOUNT_TITLE}'` } },
-  );
-  const { data } = await response.json();
-  const node = data?.discountNodes?.nodes?.[0];
-  if (!node?.discount || node.discount.__typename !== "DiscountAutomaticApp") {
-    return null;
-  }
-  return { id: node.id, title: node.discount.title, status: node.discount.status };
-}
-
-async function activateComboBundleDiscount(admin) {
-  const existing = await findExistingDiscount(admin);
-  if (existing) {
-    return { alreadyActive: true, discount: existing };
-  }
-
-  const functionQuery = await admin.graphql(
     `#graphql
     query ComboBundleFunction {
       shopifyFunctions(first: 25) {
@@ -66,14 +36,62 @@ async function activateComboBundleDiscount(admin) {
       }
     }`,
   );
-  const { data: functionData } = await functionQuery.json();
-  const bundleFunction = functionData?.shopifyFunctions?.nodes?.find(
+  const { data } = await response.json();
+  const bundleFunction = data?.shopifyFunctions?.nodes?.find(
     (fn) => fn.title === "custom-bundle-discount",
   );
-  if (!bundleFunction) {
+  return bundleFunction?.id ?? null;
+}
+
+// Looks up whether an automatic app discount running this app's function
+// already exists, so re-opening this page (or clicking Activate twice)
+// can't create duplicate discounts the way the old app.activate.jsx debug
+// page could. Matches by function, not title, since the discount may have
+// been created (by this app or by hand) under a title other than
+// DISCOUNT_TITLE.
+async function findExistingDiscount(admin, functionId) {
+  if (!functionId) return null;
+
+  const response = await admin.graphql(
+    `#graphql
+    query FindComboBundleDiscount {
+      discountNodes(first: 50) {
+        nodes {
+          id
+          discount {
+            __typename
+            ... on DiscountAutomaticApp {
+              title
+              status
+              appDiscountType { functionId }
+            }
+          }
+        }
+      }
+    }`,
+  );
+  const { data } = await response.json();
+  const nodes = data?.discountNodes?.nodes ?? [];
+  const node = nodes.find(
+    (candidate) =>
+      candidate.discount?.__typename === "DiscountAutomaticApp" &&
+      candidate.discount.appDiscountType?.functionId === functionId,
+  );
+  if (!node) return null;
+  return { id: node.id, title: node.discount.title, status: node.discount.status };
+}
+
+async function activateComboBundleDiscount(admin) {
+  const bundleFunctionId = await getBundleFunctionId(admin);
+  if (!bundleFunctionId) {
     throw new Error(
       "Discount function not found. Run `npm run deploy` to deploy extensions first.",
     );
+  }
+
+  const existing = await findExistingDiscount(admin, bundleFunctionId);
+  if (existing) {
+    return { alreadyActive: true, discount: existing };
   }
 
   const response = await admin.graphql(
@@ -88,7 +106,7 @@ async function activateComboBundleDiscount(admin) {
       variables: {
         automaticAppDiscount: {
           title: DISCOUNT_TITLE,
-          functionId: bundleFunction.id,
+          functionId: bundleFunctionId,
           startsAt: new Date().toISOString(),
           discountClasses: ["PRODUCT"],
         },
@@ -110,10 +128,21 @@ async function activateComboBundleDiscount(admin) {
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-  const [settings, discount] = await Promise.all([
+  const [settings, bundleFunctionId] = await Promise.all([
     getComboBundleSettings(admin),
-    findExistingDiscount(admin),
+    getBundleFunctionId(admin),
+    // Repairs storefront read access on the settings metafield definition
+    // for shops that installed before it was added at creation time. Runs
+    // alongside the other loader queries so it adds no serial latency, and
+    // is a no-op once access is already correct.
+    ensureSettingsMetafieldDefinition(admin).catch((error) => {
+      console.error(
+        "Combo Bundles: failed to verify settings metafield storefront access",
+        error,
+      );
+    }),
   ]);
+  const discount = await findExistingDiscount(admin, bundleFunctionId);
   return json({ settings, discount });
 };
 
