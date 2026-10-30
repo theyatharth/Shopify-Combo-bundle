@@ -23,10 +23,9 @@ import {
 const DISCOUNT_TITLE = "Mix & Match Bundle Savings";
 const TIER_MINS = [2, 3, 4, 5, 6];
 
-// TEMPORARY: titles seen in the wild for discounts that should count as
-// "ours" even when the functionId match below fails (e.g. eco-fynd's
-// "Combo bundle discount"). Remove once COMBO-DEBUG logging confirms why
-// the functionId match alone isn't finding them.
+// Titles seen in the wild for discounts that should count as "ours" even
+// when the functionId match below doesn't line up (e.g. a discount created
+// by an earlier version of this app, or by hand, under a different title).
 const FALLBACK_DISCOUNT_TITLES = new Set(["Combo bundle discount", DISCOUNT_TITLE]);
 
 // Looks up every Shopify Function this app ships, so we can match *any*
@@ -44,14 +43,9 @@ async function getBundleFunctions(admin) {
   );
   const { data, errors } = await response.json();
   if (errors) {
-    console.error("COMBO-DEBUG shopifyFunctions GraphQL errors", JSON.stringify(errors));
+    console.error("Combo Bundles: GraphQL error fetching shopifyFunctions", errors);
   }
-  const nodes = data?.shopifyFunctions?.nodes ?? [];
-  console.log(
-    "COMBO-DEBUG shopifyFunctions nodes",
-    JSON.stringify(nodes.map((fn) => ({ id: fn.id, apiType: fn.apiType, title: fn.title }))),
-  );
-  return nodes;
+  return data?.shopifyFunctions?.nodes ?? [];
 }
 
 // Returns the ids of every shopifyFunctions node titled "custom-bundle-discount".
@@ -65,9 +59,9 @@ async function getBundleFunctionIds(admin) {
 // Looks up whether an automatic app discount running this app's function
 // already exists, so re-opening this page (or clicking Activate twice)
 // can't create duplicate discounts the way the old app.activate.jsx debug
-// page could. Matches by function id first; falls back to known titles
-// (see FALLBACK_DISCOUNT_TITLES) while we debug why eco-fynd's discount
-// isn't matching by function id alone.
+// page could. Matches by function id first, falling back to known titles
+// (see FALLBACK_DISCOUNT_TITLES) for discounts created before/outside the
+// function-id match.
 async function findExistingDiscount(admin, functionIds) {
   const response = await admin.graphql(
     `#graphql
@@ -92,22 +86,9 @@ async function findExistingDiscount(admin, functionIds) {
   );
   const { data, errors } = await response.json();
   if (errors) {
-    console.error("COMBO-DEBUG discountNodes GraphQL errors", JSON.stringify(errors));
+    console.error("Combo Bundles: GraphQL error fetching discountNodes", errors);
   }
   const nodes = data?.discountNodes?.nodes ?? [];
-  console.log(
-    "COMBO-DEBUG discountNodes",
-    JSON.stringify(
-      nodes.map((candidate) => ({
-        id: candidate.id,
-        typename: candidate.discount?.__typename,
-        title: candidate.discount?.title,
-        status: candidate.discount?.status,
-        functionId: candidate.discount?.appDiscountType?.functionId,
-        appTitle: candidate.discount?.appDiscountType?.app?.title,
-      })),
-    ),
-  );
 
   const functionIdSet = new Set(functionIds ?? []);
   const node = nodes.find((candidate) => {
