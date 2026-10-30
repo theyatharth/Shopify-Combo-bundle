@@ -11,7 +11,7 @@
 {% liquid
  assign byob_collection = collections[block.settings.collection]
  assign byob_max_items = block.settings.max_items | default: 6
- assign byob_settings = shop.metafields.combo_bundles.settings.value
+ assign cb_settings = shop.metafields.combo_bundles.settings.value
  assign byob_tier_2 = 5
  assign byob_tier_3 = 8
  assign byob_tier_4 = 10
@@ -20,34 +20,39 @@
  assign byob_accent = '#1B5E20'
  assign byob_accent_light = '#E8F5E9'
  assign byob_bg = '#FFFFFF'
- if byob_settings
-  for byob_tier in byob_settings.tiers
-   case byob_tier.min
-    when 2
-     assign byob_tier_2 = byob_tier.pct
-    when 3
-     assign byob_tier_3 = byob_tier.pct
-    when 4
-     assign byob_tier_4 = byob_tier.pct
-    when 5
-     assign byob_tier_5 = byob_tier.pct
-    when 6
-     assign byob_tier_6 = byob_tier.pct
-   endcase
+ if cb_settings != blank
+  for tier in cb_settings.tiers
+   assign tier_min = tier.min | plus: 0
+   if tier_min == 2
+    assign byob_tier_2 = tier.pct
+   elsif tier_min == 3
+    assign byob_tier_3 = tier.pct
+   elsif tier_min == 4
+    assign byob_tier_4 = tier.pct
+   elsif tier_min == 5
+    assign byob_tier_5 = tier.pct
+   elsif tier_min == 6
+    assign byob_tier_6 = tier.pct
+   endif
   endfor
-  if byob_settings.colors.accent
-   assign byob_accent = byob_settings.colors.accent
+  assign cb_accent = cb_settings.colors.accent
+  if cb_accent != blank
+   assign byob_accent = cb_accent
   endif
-  if byob_settings.colors.accentLight
-   assign byob_accent_light = byob_settings.colors.accentLight
+  assign cb_accent_light = cb_settings.colors.accentLight
+  if cb_accent_light != blank
+   assign byob_accent_light = cb_accent_light
   endif
-  if byob_settings.colors.background
-   assign byob_bg = byob_settings.colors.background
+  assign cb_bg = cb_settings.colors.background
+  if cb_bg != blank
+   assign byob_bg = cb_bg
   endif
  endif
  assign byob_collection_handle = byob_collection.handle
  assign byob_product_count = byob_collection.products_count
 %}
+<!-- combo-debug: {{ shop.metafields.combo_bundles.settings.value | json }} -->
+<!-- TEMPORARY: remove this comment once the tiers/colors above are confirmed correct in page source. -->
 <style>
   #byob-block-{{ block.id }},
  #byob-bottom-bar-{{ block.id }} {
